@@ -6,6 +6,8 @@ Vsedi は Windows / macOS 向けの Tauri v2 デスクトップアプリケー�
 
 Web フロントエンドは状態表示とユーザー操作の受付を担当し、ファイルシステムへのアクセス、Git プロセスの実行、プロジェクト検証などの権限を伴う処理は Rust 側が担当する。
 
+フロントエンド技術構成は ADR 0006 に従い、React + TypeScript + Vite + pnpm + Tailwind CSS + shadcn/ui を採用する。
+
 ```text
 Frontend UI
     |
@@ -171,13 +173,12 @@ Tauri の permission は必要最小限にする。JavaScript に広範な shell
 
 次の項目は意図的に M0 では固定しない。
 
-- frontend framework と UI component library
 - アプリ設定ストアの具体的な実装
 - restore / safety snapshot の具体的な方式
 - GitHub 固有 OAuth
-- updater / signing infrastructure
+- updater infrastructure
 
-各 milestone の開始時に判断し、将来の設計を大きく制約する場合は ADR として記録する。
+フロントエンド技術構成は ADR 0006 で確定済み。各 milestone の開始時に未決項目を判断し、将来の設計を大きく制約する場合は ADR として記録する。
 
 ## 参考資料
 
