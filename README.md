@@ -141,8 +141,10 @@ pnpm tauri dev
 3. 画面上部の「実行環境」が「対応対象」になり、Apple Silicon Mac では `macOS / arm64` と表示されることを確認する。
 4. 「System Git」が「利用可能」になり、Git のバージョンが表示されることを確認する。「Git LFS」は未導入なら「未導入」と表示されるが、この表示自体は失敗ではない。
 5. 「再診断」を押し、赤いエラー表示が出ないことを確認する。
-6. 「フォルダを選択」を押して Unity project のルートフォルダを選ぶ。`Assets` と `ProjectSettings/ProjectVersion.txt` があるフォルダなら、「Unity project」と Unity バージョンが表示される。`.git` がある場合は「Git repository」も表示される。
-7. 終了するときは、ターミナルで `Ctrl-C` を押す。
+6. 「フォルダを選択」を押して Unity project のルートフォルダを選ぶ。`Assets` と `ProjectSettings/ProjectVersion.txt` があるフォルダなら、Unity version と診断状態が表示される。
+7. VRChat project では Avatar / World 種別と検出 package が表示されることを確認する。
+8. `.gitignore`、`.gitattributes`、VPM package rule、Git repository root、大容量ファイル候補の診断理由が表示されることを確認する。
+9. 終了するときは、ターミナルで `Ctrl-C` を押す。
 
 Unity project が手元にない場合は、手順 1〜5 までを実施すれば、ネイティブGUIと環境診断の確認ができます。
 

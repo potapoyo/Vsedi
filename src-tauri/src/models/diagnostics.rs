@@ -44,10 +44,94 @@ pub struct EnvironmentDiagnostic {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ProjectStatus {
-    Valid,
+    Manageable,
+    NeedsAttention,
+    NotUnity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProjectKind {
+    Unity,
+    VrchatAvatar,
+    VrchatWorld,
+    VrchatAvatarAndWorld,
+    VrchatUnknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FileDiagnosticStatus {
+    Healthy,
     Missing,
-    InvalidUnity,
-    PermissionDenied,
+    NeedsAttention,
+    NotApplicable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIssue {
+    pub code: String,
+    pub severity: DiagnosticSeverity,
+    pub message: String,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigFileDiagnostic {
+    pub path: String,
+    pub status: FileDiagnosticStatus,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct VpmPackage {
+    pub name: String,
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct VpmDiagnostic {
+    pub detected: bool,
+    pub manifest_path: Option<String>,
+    pub packages: Vec<VpmPackage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryDiagnostic {
+    pub detected: Option<bool>,
+    pub root: Option<String>,
+    pub project_is_root: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LargeFileDiagnostic {
+    pub path: String,
+    #[ts(type = "number")]
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceControlDiagnostic {
+    pub gitignore: ConfigFileDiagnostic,
+    pub gitattributes: ConfigFileDiagnostic,
+    pub vpm_packages: ConfigFileDiagnostic,
+    pub large_files: Vec<LargeFileDiagnostic>,
+    pub scan_truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
@@ -57,6 +141,12 @@ pub struct ProjectDiagnostic {
     pub status: ProjectStatus,
     pub is_unity_project: bool,
     pub unity_version: Option<String>,
+    pub unity_revision: Option<String>,
+    pub project_kind: ProjectKind,
+    pub vpm: VpmDiagnostic,
+    pub repository: RepositoryDiagnostic,
+    pub source_control: SourceControlDiagnostic,
+    pub issues: Vec<ProjectIssue>,
     pub is_git_repository: Option<bool>,
 }
 

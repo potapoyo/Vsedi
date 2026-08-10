@@ -14,9 +14,29 @@ export type PlatformDiagnostic = { os: string, architecture: string, supported: 
 
 export type EnvironmentDiagnostic = { platform: PlatformDiagnostic, git: GitDiagnostic, };
 
-export type ProjectStatus = "VALID" | "MISSING" | "INVALID_UNITY" | "PERMISSION_DENIED";
+export type ProjectStatus = "MANAGEABLE" | "NEEDS_ATTENTION" | "NOT_UNITY";
 
-export type ProjectDiagnostic = { path: string, status: ProjectStatus, isUnityProject: boolean, unityVersion: string | null, isGitRepository: boolean | null, };
+export type ProjectKind = "UNITY" | "VRCHAT_AVATAR" | "VRCHAT_WORLD" | "VRCHAT_AVATAR_AND_WORLD" | "VRCHAT_UNKNOWN";
+
+export type DiagnosticSeverity = "INFO" | "WARNING" | "ERROR";
+
+export type FileDiagnosticStatus = "HEALTHY" | "MISSING" | "NEEDS_ATTENTION" | "NOT_APPLICABLE";
+
+export type ProjectIssue = { code: string, severity: DiagnosticSeverity, message: string, path: string | null, };
+
+export type ConfigFileDiagnostic = { path: string, status: FileDiagnosticStatus, summary: string, };
+
+export type VpmPackage = { name: string, version: string | null, };
+
+export type VpmDiagnostic = { detected: boolean, manifestPath: string | null, packages: Array<VpmPackage>, };
+
+export type RepositoryDiagnostic = { detected: boolean | null, root: string | null, projectIsRoot: boolean | null, };
+
+export type LargeFileDiagnostic = { path: string, sizeBytes: number, };
+
+export type SourceControlDiagnostic = { gitignore: ConfigFileDiagnostic, gitattributes: ConfigFileDiagnostic, vpmPackages: ConfigFileDiagnostic, largeFiles: Array<LargeFileDiagnostic>, scanTruncated: boolean, };
+
+export type ProjectDiagnostic = { path: string, status: ProjectStatus, isUnityProject: boolean, unityVersion: string | null, unityRevision: string | null, projectKind: ProjectKind, vpm: VpmDiagnostic, repository: RepositoryDiagnostic, sourceControl: SourceControlDiagnostic, issues: Array<ProjectIssue>, isGitRepository: boolean | null, };
 
 export type RecentProject = { path: string, lastOpenedAt: string | null, };
 

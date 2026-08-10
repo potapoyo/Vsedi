@@ -105,6 +105,38 @@ pub fn is_repository(executable: &Path, project_path: &Path) -> Option<bool> {
     Some(output.status == Some(0) && output.stdout.trim() == "true")
 }
 
+pub fn repository_root(executable: &Path, project_path: &Path) -> Option<Option<String>> {
+    let output = run_git(
+        executable,
+        &["rev-parse", "--show-toplevel"],
+        Some(project_path),
+    )
+    .ok()?;
+    if output.status != Some(0) {
+        return Some(None);
+    }
+    let root = output.stdout.lines().next()?.trim();
+    (!root.is_empty()).then(|| Some(root.to_owned()))
+}
+
+pub fn tracked_package_files(executable: &Path, project_path: &Path) -> Option<Vec<String>> {
+    let output = run_git(
+        executable,
+        &["ls-files", "--", "Packages"],
+        Some(project_path),
+    )
+    .ok()?;
+    (output.status == Some(0)).then(|| {
+        output
+            .stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    })
+}
+
 fn parse_git_version(stdout: &str) -> Option<String> {
     stdout.lines().find_map(|line| {
         line.trim()

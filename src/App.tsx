@@ -127,7 +127,65 @@ function App() {
           <Card>
             <CardHeader><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Project boundary</p><h2 className="mt-1 text-xl font-semibold">管理する project</h2></div><Button onClick={() => void chooseProject()} disabled={busy}>フォルダを選択</Button></div></CardHeader>
             <CardContent>
-              {project ? <div className="space-y-4"><div className="rounded-xl bg-slate-50 px-4 py-3"><p className="break-all text-sm font-medium">{project.path}</p><p className="mt-1 text-xs text-slate-500">{project.unityVersion ? `Unity ${project.unityVersion}` : "Unity project として未確認"}</p></div><div className="flex flex-wrap gap-2"><StatusPill label={project.status === "VALID" ? "Unity project" : "Unity 要確認"} tone={project.status === "VALID" ? "good" : "warn"} /><StatusPill label={project.isGitRepository ? "Git repository" : "Git 未初期化"} tone={project.isGitRepository ? "good" : "neutral"} /></div></div> : <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / Git の診断を行います。</div>}
+              {project ? (
+                <div className="space-y-5">
+                  <div className="rounded-xl bg-slate-50 px-4 py-3">
+                    <p className="break-all text-sm font-medium">{project.path}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {project.unityVersion ? `Unity ${project.unityVersion}` : "Unity version 不明"}
+                      {project.unityRevision ? ` · revision ${project.unityRevision}` : ""}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label={projectStatusLabel(project.status)} tone={projectStatusTone(project.status)} />
+                    <StatusPill label={projectKindLabel(project.projectKind)} tone={project.projectKind === "UNITY" ? "neutral" : "good"} />
+                    <StatusPill
+                      label={project.repository.detected ? (project.repository.projectIsRoot ? "Git root 一致" : "Git 境界を確認") : project.repository.detected === false ? "Git 未初期化" : "Git 未確認"}
+                      tone={project.repository.projectIsRoot ? "good" : project.repository.detected ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  {project.isUnityProject && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} />
+                      <DiagnosticItem label=".gitattributes" status={project.sourceControl.gitattributes.status} summary={project.sourceControl.gitattributes.summary} />
+                      <DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} />
+                    </div>
+                  )}
+
+                  {project.vpm.packages.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">検出 package</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {project.vpm.packages.filter((item) => item.name.startsWith("com.vrchat.")).map((item) => (
+                          <span key={item.name} className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
+                            {item.name}{item.version ? ` ${item.version}` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {project.issues.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">診断結果</p>
+                      {project.issues.map((issue, index) => (
+                        <div key={`${issue.code}-${index}`} className={issueClass(issue.severity)}>
+                          <p className="text-sm font-medium">{issue.message}</p>
+                          <p className="mt-1 text-xs opacity-70">{issue.code}{issue.path ? ` · ${issue.path}` : ""}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      現在の診断範囲では、修正が必要な状態は見つかりませんでした。
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / VRChat / Git / LFS 設定を診断します。</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -145,6 +203,45 @@ function App() {
 function normalizeError(error: unknown): AppError {
   if (isAppError(error)) return error;
   return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false };
+}
+
+function projectStatusLabel(status: ProjectDiagnostic["status"]) {
+  if (status === "MANAGEABLE") return "管理可能";
+  if (status === "NEEDS_ATTENTION") return "要修正";
+  return "非 Unity";
+}
+
+function projectStatusTone(status: ProjectDiagnostic["status"]): "good" | "warn" | "neutral" {
+  if (status === "MANAGEABLE") return "good";
+  if (status === "NEEDS_ATTENTION") return "warn";
+  return "neutral";
+}
+
+function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) {
+  const labels: Record<ProjectDiagnostic["projectKind"], string> = {
+    UNITY: "Unity project",
+    VRCHAT_AVATAR: "VRChat Avatar",
+    VRCHAT_WORLD: "VRChat World",
+    VRCHAT_AVATAR_AND_WORLD: "VRChat Avatar + World",
+    VRCHAT_UNKNOWN: "VRChat 種別不明",
+  };
+  return labels[kind];
+}
+
+function DiagnosticItem({ label, status, summary }: { label: string; status: ProjectDiagnostic["sourceControl"]["gitignore"]["status"]; summary: string }) {
+  const tone = status === "HEALTHY" ? "border-emerald-200 bg-emerald-50" : status === "NOT_APPLICABLE" ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50";
+  return (
+    <div className={`rounded-xl border px-3 py-3 ${tone}`}>
+      <p className="text-xs font-semibold text-slate-700">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">{summary}</p>
+    </div>
+  );
+}
+
+function issueClass(severity: ProjectDiagnostic["issues"][number]["severity"]) {
+  if (severity === "ERROR") return "rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800";
+  if (severity === "WARNING") return "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900";
+  return "rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-800";
 }
 
 export default App;

@@ -119,6 +119,20 @@ Git、Unity、VRChat/VPM、LFS、ignore 設定、大容量ファイルの診断�
 
 Git LFS は独立した executable を探索せず、Vsedi が利用する Git に対して `git lfs version` を実行して利用可否と version を診断する。これにより、実際の Git 実行環境から見える LFS 状態を診断結果の正本とする。
 
+M2 の `inspect_project` は読み取り専用で、次の情報を1つの `ProjectDiagnostic` に統合する。
+
+- `Assets` と `ProjectSettings/ProjectVersion.txt` による Unity project validation
+- Unity editor version / revision
+- `Packages/manifest.json` と `Packages/vpm-manifest.json` の package metadata
+- `com.vrchat.avatars` / `com.vrchat.worlds` に基づく Avatar / World 判定
+- Git repository root と選択 project root の境界一致
+- root `.gitignore`、`.gitattributes`、VPM用 `Packages/.gitignore` の状態
+- 50 MiB 以上の大容量ファイル候補
+
+大容量ファイル走査は `Assets`、`Packages`、`ProjectSettings` に限定し、symlink と Unity の生成物 directory を辿らない。VPM package 本体も Resolver を除いて走査対象外とする。走査件数と結果件数には上限を設け、上限到達は正常扱いせず診断警告として返す。
+
+Avatar / World 判定は package ID を根拠にする。両方が存在する場合や VRChat package はあるが種別 package がない場合は推測で正常扱いせず、要確認とする。
+
 ### SaveService
 
 製品上の「作業を保存」という操作を、検証済みの Git index / commit 操作へ変換する。
