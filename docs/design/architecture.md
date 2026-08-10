@@ -6,6 +6,10 @@ Vsedi は Windows / macOS 向けの Tauri v2 デスクトップアプリケー�
 
 Web フロントエンドは状態表示とユーザー操作の受付を担当し、ファイルシステムへのアクセス、Git プロセスの実行、プロジェクト検証などの権限を伴う処理は Rust 側が担当する。
 
+フロントエンド技術構成は ADR 0006 に従い、React + TypeScript + Vite + pnpm + Tailwind CSS + shadcn/ui を採用する。
+
+Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から TypeScript 型を生成する。
+
 ```text
 Frontend UI
     |
@@ -20,6 +24,7 @@ Application Services
     |-- SaveService
     |-- HistoryService
     |-- RestoreService
+    |-- BackupService
     `-- SyncService          (Vsedi Core 完成後)
     |
     v
@@ -29,6 +34,7 @@ Domain / Adapters
     |-- VrchatProjectAnalyzer
     |-- LfsAnalyzer
     |-- FileSafety
+    |-- SettingsStore
     `-- PlatformAdapter
 ```
 
@@ -63,6 +69,9 @@ Tauri command は Git の構文ではなく、アプリケーション上の意�
 - `get_revision_detail(project_id, revision)`
 - `preview_restore(project_id, revision)`
 - `restore_revision(project_id, revision, confirmation)`
+- `export_environment_backup(destination)`
+- `inspect_environment_backup(path)`
+- `restore_environment(path, destination_plan)`
 
 次のような汎用 command は避ける:
 
@@ -92,6 +101,12 @@ Git、Unity、VRChat/VPM、LFS、ignore 設定、大容量ファイルの診断�
 ### RestoreService
 
 復元プレビュー、安全スナップショット作成、復元実行、検証、復旧用メタデータを担当する。
+
+### BackupService
+
+ADR 0007 に従い、持ち運び可能な環境バックアップの export / import、formatVersion 検証、migration、復元計画の作成を担当する。
+
+秘密情報は環境バックアップへ含めない。
 
 ### SyncService
 
@@ -125,17 +140,43 @@ Vsedi Core 完成後に追加する。fetch / push / fast-forward 同期と履�
 
 symlink、junction、nested repository、worktree は、対応済みとして扱う前にテストを用意する。
 
-## アプリケーション状態の保存
+## アプリケーション状態と環境バックアップ
 
-将来的に、次のようなアプリケーション固有情報を小さなローカルストアへ保存してよい。
+設定は ADR 0007 に従い、用途を分離する。
+
+### アプリ内部設定
+
+現在の PC 上でのみ必要な Vsedi 固有情報をローカルファイルへ保存する。
+
+例:
 
 - onboarding 完了状態
 - 最近利用した project path
 - secret ではない UI 設定
+- window state
+
+初期実装では Tauri Store を基本候補とする。
+
+### 持ち運び可能な環境バックアップ
+
+PC 初期化・買い替え後の再構成に利用できる、バージョン付き JSON をユーザーが明示的に export / import できるようにする。
+
+- `formatVersion` を必須とする
+- 絶対 path は正本にしない
+- remote URL、Unity version、branch 等の復元に必要な非秘密情報を保持する
+- password / token / SSH private key 等の秘密情報は含めない
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-secret は通常の設定ストアへ保存しない。
+## Rust / TypeScript 型境界
+
+ADR 0008 に従い、Rust の型定義を正本とする。
+
+- `serde` で実際の serialization 形式を定義する
+- `ts-rs` で Frontend 用 TypeScript 型を生成する
+- Frontend 側で同じ response / request model を手作業で二重定義しない
+- backup manifest の公開型は `formatVersion` と合わせて互換性を管理する
+- Rust 内部型と公開 DTO は必要に応じて分離する
 
 ## エラーモデル
 
@@ -167,17 +208,17 @@ Tauri の permission は必要最小限にする。JavaScript に広範な shell
 
 一般的な process / filesystem access を許可する capability の追加は、明示的なセキュリティレビュー対象とする。
 
-## M0 では確定しない設計判断
+## 現時点で未確定の設計判断
 
-次の項目は意図的に M0 では固定しない。
+次の項目は各 milestone で具体化する。
 
-- frontend framework と UI component library
-- アプリ設定ストアの具体的な実装
 - restore / safety snapshot の具体的な方式
 - GitHub 固有 OAuth
-- updater / signing infrastructure
+- updater infrastructure
+- Tauri Store の具体的な schema / file naming
+- `ts-rs` 生成物を Git に含めるか、build/test 時に生成するか
 
-各 milestone の開始時に判断し、将来の設計を大きく制約する場合は ADR として記録する。
+フロントエンド技術構成、設定/環境バックアップ方針、Rust / TypeScript 型共有方針は ADR 0006〜0008 で確定済み。
 
 ## 参考資料
 

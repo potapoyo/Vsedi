@@ -6,6 +6,23 @@ MVP は「Unity プロジェクトを登録し、安全に作業を保存し、�
 
 リモート同期は Vsedi Core 完成後に追加する。
 
+## 製品としての必須要件
+
+以下は特定マイルストーンだけの目標ではなく、Vsedi が配布可能な製品として満たす必須条件とする。
+
+- デスクトップアプリ基盤として **Tauri v2** を使用する
+- **Windows と macOS の両方を正式対応**する
+- macOS は **Apple Silicon（arm64）のみ**を正式対応とする
+- Windows / macOS は、それぞれ用意したネイティブ環境でビルド・検証できること
+- エンドユーザーへ、ソースコードや開発環境ではなく **インストール可能なバイナリ**を配布できること
+- エンドユーザーは Rust / Node.js / pnpm 等の開発ツールチェーンを導入せずに Vsedi をインストール・起動できること
+- Windows では Tauri が生成するインストーラー形式（NSIS `.exe` または MSI `.msi`）を少なくとも1種類提供すること
+- macOS では Apple Silicon 向け `.app` を含む `.dmg` を提供すること
+- インストーラーバイナリの生成をリリース工程の正式な一部として扱うこと
+- PC の初期化・故障・買い替え後に、必要な外部ツール、持ち運び可能な Vsedi 環境バックアップ、アクセス可能なリモートリポジトリから制作環境を再構成できる復元導線を提供すること
+
+Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git 自体の導入要件や未導入時の案内はアプリ側で別途扱う。
+
 ## 機能要件
 
 ### プロジェクト登録
@@ -83,6 +100,52 @@ Core 完成後に追加する。
 - `.gitattributes` 変更 preview
 - LFS push failure の検出
 
+### 環境バックアップと復元モード
+
+ADR 0007 に従い、PC を失った場合でも制作環境を再構成しやすい仕組みを提供する。
+
+#### アプリ内部設定
+
+- 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
+- 初期実装では Tauri Store を基本候補とする
+- アプリ内部設定は持ち運び可能な環境バックアップとは分離する
+
+#### 持ち運び可能な環境バックアップ
+
+- ユーザーが環境バックアップを JSON として export / import できる
+- backup format は `formatVersion` を必須とする
+- Vsedi アプリバージョンと backup format version を分離する
+- remote URL、通常利用する branch、Unity version、VCC / ALCOM 等の非秘密情報を復元に必要な範囲で保持できる
+- 旧 PC の絶対 path は正本とせず、保存する場合も参考情報として扱う
+- 新しい PC では project root / 復元先をユーザーが選択できる
+
+#### 復元モード
+
+- backup file を読み込み、形式を検証できる
+- Git / Git LFS / Unity / VCC / ALCOM 等の必要環境を診断できる
+- 不足している外部ツールをユーザーへ説明できる
+- リモートリポジトリから clone できる
+- Git LFS の必要データを取得できる
+- Unity version / VPM 構成を診断できる
+- VCC / ALCOM から利用可能な状態か診断できる
+- 復元した project を Vsedi へ登録できる
+- 復元完了時に不足項目や注意点を表示できる
+
+初期の復元モードでは Unity / VCC / ALCOM 等の自動インストールまでは必須にしない。
+
+#### 秘密情報
+
+持ち運び可能な環境バックアップには次を含めない。
+
+- password
+- GitHub Personal Access Token
+- SSH private key
+- Git credential helper が保持する秘密情報
+- VRChat の認証情報
+- VCC / ALCOM の秘密認証情報
+
+必要な認証は復元先 PC で再設定する。
+
 ## 初回チュートリアル要件
 
 初回チュートリアルは説明だけで終了させない。
@@ -98,12 +161,40 @@ Core 完成後に追加する。
 
 ## 非機能要件
 
-### 対応 OS
+### 対応 OS・アーキテクチャ
 
 - Windows を正式対象とする
-- macOS を正式対象とする
+- macOS は Apple Silicon（arm64）のみを正式対象とする
+- Intel Mac（x86_64）は正式対応対象外とする
 - OS 固有機能は adapter を分ける
-- CI / release build は各 native platform で検証する
+- build / release validation は Windows と Apple Silicon Mac の各ネイティブ環境で行う
+
+### バイナリ配布
+
+- バイナリ配布は任意機能ではなく必須要件とする
+- Windows と macOS のリリース成果物を再現可能な手順で生成できること
+- Windows は一般ユーザーが実行可能なインストーラーを提供すること
+- macOS は Apple Silicon 向け DMG を提供すること
+- 開発者向けの `cargo tauri dev` 等を、一般ユーザーの導入手順として要求しない
+- 配布成果物の最低限の起動確認を各対象 OS 上で行う
+
+### コード署名・公証
+
+- 初期配布は Windows / macOS とも未署名を正式方針とする
+- 有料の証明書や開発者プログラムへの加入を、Vsedi のビルド・配布における必須条件にはしない
+- 将来、無償で利用可能で運用上許容できるコード署名手段がある場合は再評価する
+- Apple の Notarization（公証）は初期配布の必須要件にしない
+- 未署名または公証なしの配布で OS の警告や追加操作が必要になる場合は、ユーザーへ明確な案内を提供する
+
+### Rust / TypeScript 型共有
+
+ADR 0008 に従う。
+
+- Rust 側の共有データ型を正本（Source of Truth）とする
+- `serde` で serialization 形式を定義する
+- `ts-rs` で TypeScript 型を生成する
+- Frontend 側で同一 DTO を手作業で二重定義しない
+- Rust 型と生成済み TypeScript 型の不整合を CI / test で検出できる構成にする
 
 ### セキュリティ
 
@@ -113,6 +204,7 @@ Core 完成後に追加する。
 - project path を各 mutation 前に検証する
 - credentials を Vsedi 独自の平文設定へ保存しない
 - diagnostic logs から secrets を除外する
+- 持ち運び可能な環境バックアップへ秘密情報を含めない
 
 ### 信頼性
 
@@ -120,6 +212,7 @@ Core 完成後に追加する。
 - stdout / stderr / exit status を構造化して扱う
 - mutation の途中失敗時にユーザーが現在状態を判断できる情報を残す
 - filesystem / Git integration tests 用の temporary repository fixtures を用意する
+- backup format の旧 version を読み込む場合は migration または明確な非対応エラーを提供する
 
 ### アクセシビリティと言語
 
