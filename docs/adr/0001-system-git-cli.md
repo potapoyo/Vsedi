@@ -1,51 +1,51 @@
-# ADR 0001: Use the System Git CLI
+# ADR 0001: システムの Git CLI を使用する
 
-- Status: Accepted
-- Date: 2026-08-10
+- 状態: 採用
+- 日付: 2026-08-10
 
-## Context
+## 背景
 
-Vsedi needs Git operations on Windows and macOS, including normal repository operations, Git LFS, credentials, and interoperability with the user's existing Git environment.
+Vsedi は Windows / macOS 上で、通常のリポジトリ操作、Git LFS、認証、ユーザー既存の Git 環境との相互運用を含む Git 操作を行う必要がある。
 
-Possible approaches include embedding a Git implementation/library or invoking the system Git executable.
+方式としては、Git 実装やライブラリをアプリへ組み込む方法と、システムにインストールされた Git executable を呼び出す方法が考えられる。
 
-## Decision
+## 決定
 
-Vsedi will initially use the **system Git CLI from Rust** as its Git backend.
+Vsedi の初期 Git backend は、**Rust 側からシステムの Git CLI を呼び出す方式**とする。
 
-Frontend code will not build or execute arbitrary Git commands. Rust application services will expose explicit operations such as `get_status`, `save_work`, `get_history`, and `restore_preview`.
+Frontend code から任意の Git command を組み立てたり実行したりしない。Rust の application service が `get_status`、`save_work`、`get_history`、`restore_preview` などの明示的な操作を公開する。
 
-Commands will be executed with an executable plus structured argument list rather than by concatenating a shell command string.
+command は shell command の文字列を連結するのではなく、executable と構造化された argument list を分けて実行する。
 
-## Consequences
+## 影響
 
-Positive:
+利点:
 
-- Git LFS can use its normal Git integration
-- existing user Git configuration is respected
-- credential helpers and OS-secure stores can be reused
-- behavior is close to what advanced users can inspect from a terminal
-- fewer semantic differences from normal Git workflows
+- Git LFS の通常の Git integration を利用できる
+- ユーザー既存の Git configuration を尊重できる
+- credential helper や OS の secure store を再利用できる
+- 上級者が terminal から確認できる通常の Git 挙動に近い
+- 一般的な Git workflow との意味上の差異を減らせる
 
-Negative:
+欠点:
 
-- Git must be installed or bundled/installed later through a separate design
-- output parsing must be designed carefully and tested across supported Git versions
-- environment/PATH differences must be handled
-- process execution is a privileged boundary and must be constrained
+- Git がインストールされている必要がある。将来 bundle / install を支援する場合は別途設計が必要
+- output parsing を慎重に設計し、対応 Git version 間でテストする必要がある
+- environment / PATH の差異へ対応する必要がある
+- process execution は権限を伴う境界なので厳しく制限する必要がある
 
-## Security constraints
+## セキュリティ上の制約
 
-- Do not expose arbitrary command execution to the frontend
-- Do not invoke `sh -c`, `cmd /c`, PowerShell command strings, or equivalent for routine Git operations
-- Validate the target project path before mutating operations
-- Capture exit status/stdout/stderr without logging credentials
+- Frontend へ任意 command execution を公開しない
+- 通常の Git 操作で `sh -c`、`cmd /c`、PowerShell command string などを使用しない
+- 状態変更操作の前に対象 project path を検証する
+- exit status / stdout / stderr を取得する際に credential をログへ残さない
 
-## Revisit when
+## 再検討する条件
 
-Reconsider a library backend only if system Git proves to create unacceptable installation, portability, or parsing problems.
+システム Git が、導入性・可搬性・出力解析の面で許容できない問題を生むことが確認された場合にのみ、library backend を再検討する。
 
-## References
+## 参考資料
 
 - Git credentials: https://git-scm.com/docs/gitcredentials.html
 - Tauri shell plugin: https://v2.tauri.app/plugin/shell/
