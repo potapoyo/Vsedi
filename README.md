@@ -8,8 +8,8 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 - Windows / macOS 対応
 - Tauri v2 を利用
-- Local First: GitHub 等のリモートがなくても価値が成立する
-- Safety over Power: 高機能な Git GUI より事故防止を優先する
+- ローカルファースト（Local First）: GitHub 等のリモートがなくても価値が成立する
+- 安全性を機能性より優先（Safety over Power）: 高機能な Git GUI より事故防止を優先する
 - Unity / VRChat / VPM の構成を理解して安全性を高める
 - 仕様・設計思想・重要な判断は `docs/` に Markdown で残す
 
@@ -22,10 +22,11 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 - [`docs/product/vision.md`](docs/product/vision.md) — 製品ビジョンと対象ユーザー
 - [`docs/design/principles.md`](docs/design/principles.md) — 設計原則
 - [`docs/design/safety-model.md`](docs/design/safety-model.md) — 復元・破壊的操作の安全モデル
+- [`docs/design/architecture.md`](docs/design/architecture.md) — アーキテクチャと権限境界
 - [`docs/development/requirements.md`](docs/development/requirements.md) — MVP 要件
 - [`docs/development/roadmap.md`](docs/development/roadmap.md) — 開発フェーズ
-- [`docs/adr/`](docs/adr/) — Architecture Decision Records
+- [`docs/adr/`](docs/adr/) — アーキテクチャ判断記録（ADR）
 
-## License
+## ライセンス
 
-GNU General Public License v3.0. See [`LICENSE`](LICENSE).
+GNU General Public License v3.0。詳細は [`LICENSE`](LICENSE) を参照してください。
