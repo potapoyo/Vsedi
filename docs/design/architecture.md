@@ -90,6 +90,8 @@ Tauri command は Git の構文ではなく、アプリケーション上の意�
 
 Git、Unity、VRChat/VPM、LFS、ignore 設定、大容量ファイルの診断結果を統合し、ユーザー向けの診断情報へ変換する。
 
+Git LFS は独立した executable を探索せず、Vsedi が利用する Git に対して `git lfs version` を実行して利用可否と version を診断する。これにより、実際の Git 実行環境から見える LFS 状態を診断結果の正本とする。
+
 ### SaveService
 
 製品上の「作業を保存」という操作を、検証済みの Git index / commit 操作へ変換する。
@@ -124,6 +126,7 @@ Vsedi Core 完成後に追加する。fetch / push / fast-forward 同期と履�
 - exit code、stdout、stderr を分離して取得する
 - parser は fixture を用いたテストを行う
 - secret をログへコピーしない
+- Git LFS の診断は検出済み Git に `lfs version` を引数として渡して行い、`git-lfs` を別 executable として探索しない
 
 実装時には、適切な場所で NUL 区切りの status format など、安定した機械可読出力を持つ Git の plumbing / porcelain format を選択する。
 
