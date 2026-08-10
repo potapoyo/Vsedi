@@ -1,44 +1,44 @@
-# ADR 0004: Delegate Git Credentials to Git Credential Helpers
+# ADR 0004: Git の認証情報管理を Credential Helper に委ねる
 
-- Status: Accepted
-- Date: 2026-08-10
+- 状態: 採用
+- 日付: 2026-08-10
 
-## Context
+## 背景
 
-Remote Git operations may require credentials. Storing access tokens or passwords in Vsedi's own plaintext configuration would create unnecessary security risk and duplicate platform-specific secure-storage behavior.
+リモート Git 操作では認証情報が必要になる場合がある。access token や password を Vsedi 独自の平文設定へ保存すると、不要なセキュリティリスクを生み、OS ごとの secure storage の仕組みを重複実装することになる。
 
-Git already supports credential helpers, including helpers that integrate with OS keychains or secure credential stores.
+Git には credential helper の仕組みがあり、OS の keychain や安全な credential store と連携する helper も利用できる。
 
-## Decision
+## 決定
 
-Vsedi will not initially implement its own persistent Git credential store.
+Vsedi は初期段階では独自の永続 Git credential store を実装しない。
 
-Remote operations performed through the system Git CLI will use the user's configured Git credential helper / askpass mechanism.
+システム Git CLI を通じて実行する remote operation では、ユーザーが設定している Git credential helper / askpass mechanism を利用する。
 
-Vsedi must never intentionally write tokens or passwords into:
+Vsedi は token や password を意図的に次へ書き込んではならない。
 
 - application settings
 - repository configuration
 - diagnostic logs
 - remote URLs
 
-## Consequences
+## 影響
 
-Positive:
+利点:
 
-- reuses established Git authentication behavior
-- can integrate with OS secure storage through existing helpers
-- avoids becoming a password manager
+- 実績のある Git authentication behavior を再利用できる
+- 既存 helper を通じて OS secure storage と連携できる
+- Vsedi 自体を password manager にする必要がない
 
-Negative:
+欠点:
 
-- authentication UX can differ depending on the user's Git installation and helper
-- GUI prompt integration may need additional work for environments without a usable helper / askpass setup
+- ユーザーの Git installation / helper によって authentication UX が異なる場合がある
+- 利用可能な helper / askpass setup がない環境では、GUI prompt integration を追加で設計する必要がある
 
-## Future work
+## 将来の検討
 
-If Vsedi later provides first-class GitHub OAuth, that should be a separate ADR and must use secure OS-backed storage rather than replacing this decision implicitly.
+将来 Vsedi が GitHub OAuth を正式に提供する場合は、別 ADR として設計する。その場合もこの判断を暗黙に置き換えず、OS backed secure storage を利用する。
 
-## Reference
+## 参考資料
 
 - https://git-scm.com/docs/gitcredentials.html
