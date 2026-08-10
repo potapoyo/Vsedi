@@ -107,14 +107,19 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 #### アプリ内部設定
 
 - 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
-- 初期実装では Tauri Store を基本候補とする
+- 初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する
+- `settings.json` は Explorer / Finder 等から通常のファイルとしてコピーできること
+- `settings.json` は整数の `schemaVersion` を必須とし、初期値は `1` とする
+- 対応する `settings.json` を所定のアプリデータ領域へ手動配置した場合、Vsedi が通常の設定ファイルとして読み込めること
+- 古い schema は可能な範囲で migration し、未対応 schema や破損 JSON を黙って上書きしないこと
+- 手動復元された設定内の旧 PC の path が存在しない場合は、クラッシュせず再選択・再登録を促すこと
 - アプリ内部設定は持ち運び可能な環境バックアップとは分離する
 
 #### 持ち運び可能な環境バックアップ
 
-- ユーザーが環境バックアップを JSON として export / import できる
-- backup format は `formatVersion` を必須とする
-- Vsedi アプリバージョンと backup format version を分離する
+- ユーザーが環境バックアップを `vsedi-environment.vsedi.json` として export / import できる
+- backup format は `formatVersion` を必須とし、初期値は `1` とする
+- Vsedi アプリバージョン、settings schema version、backup format version を分離する
 - remote URL、通常利用する branch、Unity version、VCC / ALCOM 等の非秘密情報を復元に必要な範囲で保持できる
 - 旧 PC の絶対 path は正本とせず、保存する場合も参考情報として扱う
 - 新しい PC では project root / 復元先をユーザーが選択できる
@@ -135,7 +140,7 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 
 #### 秘密情報
 
-持ち運び可能な環境バックアップには次を含めない。
+`settings.json` および持ち運び可能な環境バックアップには次を含めない。
 
 - password
 - GitHub Personal Access Token
@@ -204,7 +209,7 @@ ADR 0008 に従う。
 - project path を各 mutation 前に検証する
 - credentials を Vsedi 独自の平文設定へ保存しない
 - diagnostic logs から secrets を除外する
-- 持ち運び可能な環境バックアップへ秘密情報を含めない
+- `settings.json` および持ち運び可能な環境バックアップへ秘密情報を含めない
 
 ### 信頼性
 
@@ -212,7 +217,7 @@ ADR 0008 に従う。
 - stdout / stderr / exit status を構造化して扱う
 - mutation の途中失敗時にユーザーが現在状態を判断できる情報を残す
 - filesystem / Git integration tests 用の temporary repository fixtures を用意する
-- backup format の旧 version を読み込む場合は migration または明確な非対応エラーを提供する
+- settings schema / backup format の旧 version を読み込む場合は migration または明確な非対応エラーを提供する
 
 ### アクセシビリティと言語
 
