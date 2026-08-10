@@ -1,12 +1,12 @@
-# Vsedi Product Vision
+# Vsedi 製品ビジョン
 
-## Purpose
+## 目的
 
 Vsedi は、VRChat のアバター／ワールド制作者が Unity プロジェクトを安全に保存・確認・復元するためのデスクトップアプリである。
 
 一般的な Git GUI を再実装することではなく、Git の仕組みを利用して VRChat 制作に必要な「セーブポイント」を分かりやすく提供する。
 
-## Target user
+## 対象ユーザー
 
 主な対象は次のような制作者。
 
@@ -16,7 +16,7 @@ Vsedi は、VRChat のアバター／ワールド制作者が Unity プロジェ
 - BOOTH 等の購入アセットを扱うため、公開範囲には慎重でありたい
 - 必要なら GitHub 等へバックアップしたいが、GitHub は必須にしたくない
 
-## Core job
+## 中心となる利用体験
 
 ユーザーが次の流れを安心して行えること。
 
@@ -27,7 +27,7 @@ Vsedi は、VRChat のアバター／ワールド制作者が Unity プロジェ
 5. 問題が起きたら安全スナップショットを作成してから過去の状態へ戻す
 6. 必要に応じてリモートへバックアップする
 
-## Positioning
+## 製品の位置づけ
 
 Vsedi は「VRChat 向け Git クライアント」ではあるが、UI 上の主語は Git ではなく制作作業とする。
 
@@ -41,7 +41,7 @@ Vsedi は「VRChat 向け Git クライアント」ではあるが、UI 上の�
 
 必要な場面では Git 用語も補足表示し、仕組みそのものを完全には隠さない。
 
-## Success criteria for the first usable version
+## 最初の実用版の完成条件
 
 次が一連で動けば Vsedi Core が成立したとみなす。
 
@@ -49,9 +49,9 @@ Vsedi は「VRChat 向け Git クライアント」ではあるが、UI 上の�
 
 リモート同期はこの価値が成立した後に追加する。
 
-## References
+## 参考資料
 
-- VRChat Creator Companion: Using Source Control with the VPM
+- VRChat Creator Companion: VPM でのソース管理
   - https://vcc.docs.vrchat.com/vpm/source-control/
-- VRChat Creation: Updating the SDK
+- VRChat Creation: SDK の更新
   - https://creators.vrchat.com/sdk/updating-the-sdk/
