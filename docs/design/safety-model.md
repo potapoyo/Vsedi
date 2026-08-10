@@ -1,41 +1,41 @@
-# Safety Model
+# 安全モデル
 
-## Goal
+## 目的
 
 Vsedi の安全モデルは「ユーザーの現在の作業状態を、本人が理解しないまま失わせない」ことを最優先とする。
 
-## Operation classes
+## 操作の分類
 
-### Safe read operations
+### 安全な読み取り操作
 
 原則として確認なしで実行できる。
 
-- Git / Git LFS version detection
-- repository status
-- history reading
-- diff reading
-- remote status / fetch
-- Unity / VRChat project diagnostics
+- Git / Git LFS のバージョン検出
+- リポジトリ状態の確認
+- 履歴の読み取り
+- diff の読み取り
+- リモート状態の確認 / fetch
+- Unity / VRChat プロジェクト診断
 
-### Mutating but recoverable operations
+### 状態を変更するが復旧可能な操作
 
 実行内容を UI で明示し、失敗時に状態を説明する。
 
 - `git init`
 - add / commit
 - `.gitignore` / `.gitattributes` の追記・マージ
-- remote configuration
+- remote 設定
 - push
 
-### Potentially destructive operations
+### 破壊的になり得る操作
 
-通常フローでは事前に safety snapshot を要求する。
+通常フローでは事前に安全スナップショットを要求する。
 
 - 過去状態への復元
 - branch / revision の切り替えで worktree が変わる操作
 - remote の状態をローカルへ反映する操作
 
-## Safety snapshot
+## 安全スナップショット
 
 過去状態へ戻す前に、現在の変更を失わないための保存点を作る。
 
@@ -51,7 +51,7 @@ Vsedi の安全モデルは「ユーザーの現在の作業状態を、本人�
 
 snapshot の具体的な実装方法は Restore 実装前に追加 ADR で確定する。
 
-## Prohibited in MVP
+## MVP で提供しない操作
 
 次の操作は MVP の通常 UI では提供しない。
 
@@ -62,7 +62,7 @@ snapshot の具体的な実装方法は Restore 実装前に追加 ADR で確定
 - automatic merge conflict resolution
 - branch history rewriting
 
-## Diverged history
+## 履歴が分岐した場合
 
 remote と local が分岐している場合、MVP は自動統合しない。
 
@@ -72,9 +72,9 @@ remote と local が分岐している場合、MVP は自動統合しない。
 - local / remote のそれぞれの先行 commit を表示
 - 「Vsedi は安全のため自動統合しません」と説明する
 
-## Unity-aware protections
+## Unity を考慮した保護
 
-### Unity running
+### Unity 起動中
 
 worktree を大きく変更する操作では Unity の起動状態を可能な範囲で検知する。
 
@@ -84,21 +84,21 @@ worktree を大きく変更する操作では Unity の起動状態を可能な�
 
 Unity asset と `.meta` の不整合が疑われる場合は警告する。Vsedi が独自判断で `.meta` を生成・削除しない。
 
-### VPM packages
+### VPM パッケージ
 
-VRChat 公式 guidance に従い、通常は `Assets/`, `ProjectSettings/`, `Packages/` の必要情報を追跡しつつ、VPM package 本体は Resolver 等の例外を除いて source control から除外する。
+VRChat 公式ガイドに従い、通常は `Assets/`, `ProjectSettings/`, `Packages/` の必要情報を追跡しつつ、VPM パッケージ本体は Resolver 等の例外を除いてソース管理から除外する。
 
-### SDK / Unity update checkpoints
+### SDK / Unity 更新前のチェックポイント
 
 SDK / VPM package / Unity 更新前には作業保存を促す。VRChat 公式も SDK 更新前の commit、および Unity 更新前の backup / version control を推奨している。
 
-## Public repository warning
+## 公開リポジトリへの警告
 
 VRChat プロジェクトには再配布条件のある購入アセットが含まれる可能性がある。
 
-Vsedi が将来 GitHub repository 作成を支援する場合、公開 repository を選択する前に明示的な警告を出す。Vsedi がアセットの利用規約を自動判定できるとは表現しない。
+Vsedi が将来 GitHub リポジトリ作成を支援する場合、公開リポジトリを選択する前に明示的な警告を出す。Vsedi がアセットの利用規約を自動判定できるとは表現しない。
 
-## Logging
+## ログ
 
 ログには次を極力含めない。
 
@@ -108,7 +108,7 @@ Vsedi が将来 GitHub repository 作成を支援する場合、公開 repositor
 
 個人 path は診断上必要な場合があるため、ユーザーが共有するログを export する機能では redact を検討する。
 
-## References
+## 参考資料
 
 - VRChat VPM source control: https://vcc.docs.vrchat.com/vpm/source-control/
 - VRChat SDK updates: https://creators.vrchat.com/sdk/updating-the-sdk/
