@@ -1,15 +1,15 @@
-# Architecture
+# アーキテクチャ
 
-## Overview
+## 概要
 
-Vsedi is a Tauri v2 desktop application for Windows and macOS.
+Vsedi は Windows / macOS 向けの Tauri v2 デスクトップアプリケーションである。
 
-The application is split so that the web frontend presents state and user intent, while Rust owns filesystem access, Git process execution, project validation, and other privileged operations.
+Web フロントエンドは状態表示とユーザー操作の受付を担当し、ファイルシステムへのアクセス、Git プロセスの実行、プロジェクト検証などの権限を伴う処理は Rust 側が担当する。
 
 ```text
 Frontend UI
     |
-    | typed Tauri commands / events
+    | 型付けされた Tauri command / event
     v
 Tauri Command Boundary
     |
@@ -20,7 +20,7 @@ Application Services
     |-- SaveService
     |-- HistoryService
     |-- RestoreService
-    `-- SyncService          (post-Core)
+    `-- SyncService          (Vsedi Core 完成後)
     |
     v
 Domain / Adapters
@@ -32,27 +32,27 @@ Domain / Adapters
     `-- PlatformAdapter
 ```
 
-## Frontend responsibilities
+## フロントエンドの責務
 
-The frontend may:
+フロントエンドが行ってよいこと:
 
-- render project lists, diagnostics, changes, history, and previews
-- collect user intent and confirmation
-- request a predefined application operation
-- show structured progress / errors returned by Rust
+- プロジェクト一覧、診断結果、変更、履歴、プレビューを表示する
+- ユーザーの操作意図と確認を受け取る
+- あらかじめ定義されたアプリケーション操作を要求する
+- Rust から返された構造化済みの進捗・エラーを表示する
 
-The frontend must not:
+フロントエンドが行ってはいけないこと:
 
-- execute arbitrary shell commands
-- construct raw Git commands for execution
-- directly mutate arbitrary files in a project
-- receive or persist Git passwords/tokens as application configuration
+- 任意の shell command を実行する
+- 実行用の生の Git command を組み立てる
+- プロジェクト内の任意ファイルを直接変更する
+- Git の password / token をアプリ設定として受け取ったり永続化したりする
 
-## Rust command boundary
+## Rust コマンド境界
 
-Tauri commands should model application intent rather than Git syntax.
+Tauri command は Git の構文ではなく、アプリケーション上の意図を表現する。
 
-Prefer commands similar to:
+推奨する command の例:
 
 - `inspect_environment()`
 - `inspect_project(path)`
@@ -64,122 +64,122 @@ Prefer commands similar to:
 - `preview_restore(project_id, revision)`
 - `restore_revision(project_id, revision, confirmation)`
 
-Avoid a generic command such as:
+次のような汎用 command は避ける:
 
 - `run_git(args)`
 - `run_shell(command)`
 
-A generic escape hatch would move the security boundary into the frontend and defeat the purpose of the service layer.
+汎用的な抜け道を用意すると、セキュリティ境界がフロントエンド側へ移動し、service layer を設ける意味が失われる。
 
-## Application services
+## Application Service
 
 ### ProjectService
 
-Owns registered-project identity, path normalization, and project lifecycle.
+登録済みプロジェクトの識別、path の正規化、プロジェクトのライフサイクルを担当する。
 
 ### DiagnosticsService
 
-Combines Git, Unity, VRChat/VPM, LFS, ignore, and large-file diagnostics into user-facing findings.
+Git、Unity、VRChat/VPM、LFS、ignore 設定、大容量ファイルの診断結果を統合し、ユーザー向けの診断情報へ変換する。
 
 ### SaveService
 
-Turns the product concept of "作業を保存" into validated Git index/commit operations.
+製品上の「作業を保存」という操作を、検証済みの Git index / commit 操作へ変換する。
 
 ### HistoryService
 
-Reads commit history and revision details without mutating the repository.
+リポジトリを変更せずに commit history と revision の詳細を読み取る。
 
 ### RestoreService
 
-Owns restore preview, safety snapshot creation, restore execution, validation, and recovery metadata.
+復元プレビュー、安全スナップショット作成、復元実行、検証、復旧用メタデータを担当する。
 
 ### SyncService
 
-Added after Vsedi Core. Owns fetch/push/fast-forward synchronization and divergence detection. It must follow ADR 0003 and stop on diverged history.
+Vsedi Core 完成後に追加する。fetch / push / fast-forward 同期と履歴分岐検出を担当する。ADR 0003 に従い、履歴が分岐している場合は停止する。
 
 ## GitAdapter
 
-The initial adapter uses the system Git CLI per ADR 0001.
+初期実装では ADR 0001 に従い、システムにインストールされた Git CLI を利用する。
 
-Requirements:
+要件:
 
-- executable and arguments are passed separately
-- working directory is explicitly provided
-- locale-sensitive human output should be avoided where machine-readable formats exist
-- exit code, stdout, and stderr are captured separately
-- parsers have fixture tests
-- secrets are not copied into logs
+- executable と arguments を分離して渡す
+- working directory を明示する
+- 機械可読形式が利用できる場合、人間向けで locale に依存する出力を避ける
+- exit code、stdout、stderr を分離して取得する
+- parser は fixture を用いたテストを行う
+- secret をログへコピーしない
 
-Useful Git plumbing/porcelain formats should be selected during implementation based on stable machine-readable output, such as NUL-delimited status formats where appropriate.
+実装時には、適切な場所で NUL 区切りの status format など、安定した機械可読出力を持つ Git の plumbing / porcelain format を選択する。
 
-## Project identity and paths
+## プロジェクト識別と path
 
-A project operation must start from a registered, normalized project root.
+プロジェクトに対する操作は、登録済みかつ正規化された project root を起点とする。
 
-Before mutation:
+状態変更前には次を行う。
 
-1. resolve the registered project root
-2. canonicalize/normalize the target path according to platform rules
-3. confirm the operation is scoped to the intended repository
-4. reject unexpected repository/worktree boundaries unless explicitly supported
+1. 登録済み project root を解決する
+2. OS ごとの規則に従って対象 path を canonicalize / normalize する
+3. 操作対象が意図した repository の範囲内であることを確認する
+4. 明示的に対応していない repository / worktree 境界を検出した場合は拒否する
 
-Symlinks, junctions, nested repositories, and worktrees need tests before being treated as supported scenarios.
+symlink、junction、nested repository、worktree は、対応済みとして扱う前にテストを用意する。
 
-## State storage
+## アプリケーション状態の保存
 
-Application-level preferences may eventually use a small local store for information such as:
+将来的に、次のようなアプリケーション固有情報を小さなローカルストアへ保存してよい。
 
-- onboarding completion
-- recent project paths
-- non-secret UI preferences
+- onboarding 完了状態
+- 最近利用した project path
+- secret ではない UI 設定
 
-Repository truth must remain in Git / project files rather than being duplicated as authoritative application state.
+リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-Secrets must not be stored in the ordinary preference store.
+secret は通常の設定ストアへ保存しない。
 
-## Error model
+## エラーモデル
 
-Rust operations should return structured errors with at least:
+Rust 側の操作は、少なくとも次を含む構造化エラーを返す。
 
-- stable application error code
-- safe user-facing summary
-- optional technical detail safe for local display
-- operation stage
-- whether repository mutation may have occurred
+- 安定した application error code
+- ユーザーへ安全に表示できる概要
+- 必要に応じた技術的詳細
+- どの処理段階で失敗したか
+- repository の変更が発生した可能性があるか
 
-Raw stderr may be useful for diagnostics but should not automatically be treated as a user-friendly message or exported without redaction review.
+生の stderr は診断に有用な場合があるが、そのままユーザー向けメッセージとして扱わず、共有用ログへ出力する場合も redact の確認を行う。
 
-## Platform boundary
+## OS 固有処理の境界
 
-Windows/macOS-specific behavior belongs behind adapters, especially:
+特に次の Windows / macOS 固有処理は adapter の背後へ分離する。
 
-- detecting/running Unity
-- opening Finder / Explorer
-- executable discovery
-- process inspection
-- path behavior
+- Unity の検出・起動
+- Finder / Explorer を開く
+- executable の探索
+- process の検査
+- path の扱い
 
-Core Git and domain logic should be platform-independent where possible.
+Git の中心ロジックと domain logic は可能な限り OS 非依存にする。
 
 ## Tauri capabilities
 
-Use the minimum required Tauri permissions. Prefer Rust-owned process execution over exposing broad shell execution to JavaScript.
+Tauri の permission は必要最小限にする。JavaScript に広範な shell 実行能力を与えるより、Rust 側で process execution を管理する。
 
-Any capability addition that permits general process/filesystem access should receive explicit security review.
+一般的な process / filesystem access を許可する capability の追加は、明示的なセキュリティレビュー対象とする。
 
-## Deferred architecture decisions
+## M0 では確定しない設計判断
 
-The following are intentionally not fixed in M0:
+次の項目は意図的に M0 では固定しない。
 
-- frontend framework and UI component library
-- exact application preference store
-- exact restore/safety-snapshot mechanism
-- GitHub-specific OAuth
+- frontend framework と UI component library
+- アプリ設定ストアの具体的な実装
+- restore / safety snapshot の具体的な方式
+- GitHub 固有 OAuth
 - updater / signing infrastructure
 
-These should be decided when their milestone begins and recorded as ADRs when they materially constrain future design.
+各 milestone の開始時に判断し、将来の設計を大きく制約する場合は ADR として記録する。
 
-## References
+## 参考資料
 
 - Tauri v2 Shell: https://v2.tauri.app/plugin/shell/
 - Git credentials: https://git-scm.com/docs/gitcredentials.html
