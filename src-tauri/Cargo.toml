@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "安全な Unity / VRChat プロジェクト保存アプリ"
 authors = ["Vsedi contributors"]
 edition = "2021"
+default-run = "vsedi"
 
 [lib]
 name = "vsedi_lib"

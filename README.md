@@ -46,6 +46,44 @@ pnpm check-generated-types
 
 `pnpm tauri dev` / `pnpm tauri build` は Rust、Tauri の OS 依存ライブラリ、対象 OS の native toolchain が必要です。公式対応環境は Windows と Apple Silicon macOS です。
 
+### macOS の開発環境
+
+リポジトリには `mise` 用の `.mise.toml` を含めています。Node.js と Rust はリポジトリ単位で固定されるため、別のバージョンを試すときも他のプロジェクトへ影響しません。初回だけ次を実行します。
+
+```sh
+brew install mise
+mise trust
+mise install
+pnpm install --frozen-lockfile
+```
+
+現在の固定値は Node.js `22.23.1`、Rust `1.97.1` です。変更するときは、プロジェクトのディレクトリで次のように実行して `.mise.toml` を更新します。
+
+```sh
+mise use --pin node@22.23.1
+mise use --pin rust@1.97.1
+```
+
+macOS のデスクトップGUIを起動して確認する場合は、次を実行します。
+
+```sh
+pnpm tauri dev
+```
+
+#### 人が行うGUI確認
+
+これは自動E2Eではなく、アプリがネイティブウィンドウとして起動し、主要な診断操作ができることを確認するための目視スモークテストです。
+
+1. Vsedi のリポジトリで `pnpm tauri dev` を実行する。
+2. 「Vsedi」というウィンドウが開くことを確認する。
+3. 画面上部の「実行環境」が「対応対象」になり、Apple Silicon Mac では `macOS / arm64` と表示されることを確認する。
+4. 「System Git」が「利用可能」になり、Git のバージョンが表示されることを確認する。「Git LFS」は未導入なら「未導入」と表示されるが、この表示自体は失敗ではない。
+5. 「再診断」を押し、赤いエラー表示が出ないことを確認する。
+6. 「フォルダを選択」を押して Unity project のルートフォルダを選ぶ。`Assets` と `ProjectSettings/ProjectVersion.txt` があるフォルダなら、「Unity project」と Unity バージョンが表示される。`.git` がある場合は「Git repository」も表示される。
+7. 終了するときは、ターミナルで `Ctrl-C` を押す。
+
+Unity project が手元にない場合は、手順 1〜5 までを実施すれば、ネイティブGUIと環境診断の確認ができます。
+
 ## 配布方針
 
 - Windows: NSIS `.exe` または MSI `.msi` を少なくとも1種類提供

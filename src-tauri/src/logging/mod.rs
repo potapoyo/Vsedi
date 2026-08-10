@@ -210,7 +210,7 @@ fn redact_sensitive_line(line: &str) -> String {
     let Some(key) = sensitive_keys.iter().find(|key| lower.contains(*key)) else {
         return line.to_owned();
     };
-    let Some(separator) = line.find(|character| character == '=' || character == ':') else {
+    let Some(separator) = line.find(['=', ':']) else {
         return format!("{key}=[REDACTED]");
     };
     format!("{}[REDACTED]", &line[..=separator])

@@ -69,12 +69,12 @@ pub(crate) fn open_directory(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open").arg(path).status()?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(windows)]
     {
         Command::new("explorer.exe").arg(path).status()?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
