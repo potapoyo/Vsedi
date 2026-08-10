@@ -41,6 +41,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - Git version を表示できる
 - Git LFS は、検出済みの Git に対して `git lfs version` を実行し、利用可否と version を診断できる
 - Git LFS executable を Git と独立して探索しない
+- Git / Git LFS の未導入は、可能な限り例外ではなく通常の診断状態として返す
 - `.gitignore` の状態を診断できる
 - `.gitattributes` の状態を診断できる
 - VPM のソース管理ルールからの明らかな逸脱を警告できる
@@ -201,6 +202,19 @@ ADR 0008 に従う。
 - `ts-rs` で TypeScript 型を生成する
 - Frontend 側で同一 DTO を手作業で二重定義しない
 - Rust 型と生成済み TypeScript 型の不整合を CI / test で検出できる構成にする
+
+### エラー処理
+
+ADR 0009 に従う。
+
+- Rust 側に共通 `AppError` と安定した `ErrorCode` enum を定義する
+- `ErrorCode` は `<DOMAIN>_<CAUSE>` を基本とする `SCREAMING_SNAKE_CASE` とする
+- Frontend は `error.code` で UI 分岐し、Git stderr / OS error message を文字列解析して判定しない
+- `AppError` は少なくとも `code`、`message`、`technicalDetail`、`operation`、`mayHaveMutated` を表現できる
+- mutation を伴う処理が途中失敗した場合、`mayHaveMutated` を保守的に設定する
+- `AppError` / `ErrorCode` は Rust を正本として `serde + ts-rs` から TypeScript 型を生成する
+- 未導入や利用不可などユーザーが次の行動を取れる状態は、可能な限りエラーではなく通常の診断結果として表現する
+- 生の stderr / OS error をユーザー向け主要メッセージとして直接表示せず、必要な場合は redact 後の技術詳細として扱う
 
 ### セキュリティ
 
