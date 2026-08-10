@@ -26,6 +26,8 @@ M1 以降のフロントエンド構成を次のようにする。
 
 Rust 側から取得する診断・履歴などの非同期データ管理が複雑になった段階で **TanStack Query** を導入する。Redux などの大規模なグローバル状態管理ライブラリは、実際に必要性が生じるまでは導入しない。
 
+Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から生成する。
+
 ## UI 方針
 
 Web サイトのような装飾性より、デスクトップアプリとしての分かりやすさを優先する。
@@ -46,7 +48,7 @@ shadcn/ui のコンポーネントはプロジェクト側に取り込んで利�
 
 例えば UI は `saveWork(projectId, message)` のようなアプリケーション操作を要求し、実際の `git status` / `git add` / `git commit` 等の組み立てと実行は Rust 側の Service / Adapter が担当する。
 
-この方針は `docs/design/architecture.md` と ADR 0001 に従う。
+この方針は `docs/design/architecture.md`、ADR 0001、ADR 0008 に従う。
 
 ## 理由
 
