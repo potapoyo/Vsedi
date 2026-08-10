@@ -46,6 +46,68 @@ pnpm check-generated-types
 
 `pnpm tauri dev` / `pnpm tauri build` は Rust、Tauri の OS 依存ライブラリ、対象 OS の native toolchain が必要です。公式対応環境は Windows と Apple Silicon macOS です。
 
+### Windows の開発環境
+
+Windows では、次のネイティブ依存を先に用意します。
+
+1. Visual Studio Installer で **Desktop development with C++** workload と Windows SDK をインストールする。
+2. Microsoft Edge WebView2 Runtime がインストール済みであることを確認する。Windows 10 version 1803 以降と Windows 11 では通常インストール済みですが、無い場合は Evergreen Bootstrapper をインストールする。
+3. MSI installer も生成する場合は、Windows の Optional features で **VBSCRIPT** を有効にする。NSIS のみを生成する場合は不要です。
+
+PowerShell 7 と mise は `winget` で導入できます。PowerShell 7 を起動して、初回だけ次を実行します。
+
+```powershell
+winget install --id Microsoft.PowerShell --source winget
+winget install jdx.mise
+```
+
+PowerShell 7 のプロファイル（`$PROFILE`）へ次の行を一度追加し、mise を自動有効化します。
+
+```powershell
+(&mise activate pwsh) | Out-String | Invoke-Expression
+```
+
+PowerShell 7 を再起動し、Vsedi のリポジトリでプロジェクト固定のツールチェーンと依存関係を導入します。
+
+```powershell
+mise trust
+mise install
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+`.mise.toml` により、Node.js `22.23.1`、Rust `1.97.1`、`rustfmt`、`clippy` がプロジェクト単位で選択されます。導入後は次で確認できます。
+
+```powershell
+node --version
+rustc --version
+cargo --version
+pnpm --version
+```
+
+#### Windows の GUI スモークテスト
+
+```powershell
+pnpm tauri dev
+```
+
+1. 「Vsedi」というネイティブウィンドウが開くことを確認する。
+2. 「実行環境」が対応対象になり、Windows の OS / architecture が表示されることを確認する。
+3. 「System Git」に Git のバージョンが表示されることを確認する。「Git LFS」が未導入でも、その表示自体は失敗ではない。
+4. 「再診断」を押し、赤いエラー表示が出ないことを確認する。
+5. 「フォルダを選択」から Unity project のルートを選び、Unity project と Unity バージョンが表示されることを確認する。
+6. 終了するときは、ターミナルで `Ctrl+C` を押す。
+
+#### Windows の native build
+
+```powershell
+pnpm tauri build
+```
+
+installer の生成結果は `src-tauri/target/release/bundle/` 配下で確認します。MSI の生成で `light.exe` などのエラーが出る場合は、上記の VBSCRIPT を有効にしてから再実行してください。
+
+参考: [Tauri の Windows 前提条件](https://v2.tauri.app/ja/start/prerequisites/)、[mise の Windows インストール](https://mise.jdx.dev/installing-mise.html)。
+
 ### macOS の開発環境
 
 リポジトリには `mise` 用の `.mise.toml` を含めています。Node.js と Rust はリポジトリ単位で固定されるため、別のバージョンを試すときも他のプロジェクトへ影響しません。初回だけ次を実行します。
