@@ -1,0 +1,322 @@
+use crate::{
+    errors::{AppError, AppResult, ErrorCode},
+    models::{AppSettings, RecentProjectStatus, SettingsLoadResult, CURRENT_SCHEMA_VERSION},
+    platform::paths::app_data_dir,
+    settings::migration::migrate,
+};
+use serde_json::{json, Value};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tauri::AppHandle;
+use tauri_plugin_store::StoreExt;
+use tracing::{info, warn};
+
+pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
+    let directory = app_data_dir(app)?;
+    fs::create_dir_all(&directory).map_err(|error| {
+        AppError::from_io(
+            ErrorCode::FilesystemWriteFailed,
+            "create_app_data_dir",
+            &directory,
+            &error,
+        )
+    })?;
+    let path = directory.join("settings.json");
+    let (settings, recovered, backup_path) = load_file(&path)?;
+
+    // The plugin store is the runtime persistence backend. The preflight above keeps
+    // manual recovery and migration rules explicit before the store reads the file.
+    let store = app.store("settings.json").map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsReadFailed,
+            "設定ストアを開けませんでした。",
+            "open_settings_store",
+            error.to_string(),
+            false,
+        )
+    })?;
+    store.reload_ignore_defaults().map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsReadFailed,
+            "設定ストアを再読込できませんでした。",
+            "reload_settings_store",
+            error.to_string(),
+            false,
+        )
+    })?;
+
+    let recent_projects = settings
+        .recent_projects
+        .iter()
+        .map(|project| RecentProjectStatus {
+            path: project.path.clone(),
+            last_opened_at: project.last_opened_at.clone(),
+            exists: Path::new(&project.path).is_dir(),
+        })
+        .collect();
+    Ok(SettingsLoadResult {
+        settings,
+        recovered,
+        backup_path,
+        recent_projects,
+    })
+}
+
+pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
+    if settings.schema_version != CURRENT_SCHEMA_VERSION {
+        return Err(AppError::simple(
+            ErrorCode::SettingsUnsupportedSchema,
+            "保存できる設定 schemaVersion ではありません。",
+            "validate_settings_before_save",
+        ));
+    }
+
+    let store = app.store("settings.json").map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsWriteFailed,
+            "設定ストアを開けませんでした。",
+            "open_settings_store",
+            error.to_string(),
+            false,
+        )
+    })?;
+    store.set("schemaVersion", json!(settings.schema_version));
+    store.set("onboardingCompleted", json!(settings.onboarding_completed));
+    store.set(
+        "recentProjects",
+        serde_json::to_value(&settings.recent_projects).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SettingsWriteFailed,
+                "設定をシリアライズできませんでした。",
+                "serialize_settings",
+                error.to_string(),
+                false,
+            )
+        })?,
+    );
+    store.set("logLevel", json!(settings.log_level));
+    store.save().map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsWriteFailed,
+            "設定を保存できませんでした。",
+            "save_settings",
+            error.to_string(),
+            true,
+        )
+    })?;
+    info!(
+        operation = "save_settings",
+        "settings saved through Tauri Store"
+    );
+    Ok(())
+}
+
+fn load_file(path: &Path) -> AppResult<(AppSettings, bool, Option<String>)> {
+    if !path.exists() {
+        let settings = AppSettings::default();
+        write_json(path, &settings)?;
+        return Ok((settings, false, None));
+    }
+
+    let raw = fs::read_to_string(path).map_err(|error| {
+        AppError::from_io(ErrorCode::SettingsReadFailed, "read_settings", path, &error)
+    })?;
+    let parsed = match serde_json::from_str::<Value>(&raw) {
+        Ok(value) => value,
+        Err(_error) => {
+            let backup = backup_before_recovery(path)?;
+            let settings = AppSettings::default();
+            write_json(path, &settings)?;
+            warn!(operation = "recover_corrupt_settings", backup = %backup.display(), "corrupt settings were quarantined and regenerated");
+            return Ok((settings, true, Some(backup.to_string_lossy().into_owned())));
+        }
+    };
+
+    let Some(schema_version) = parsed
+        .get("schemaVersion")
+        .and_then(Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok())
+    else {
+        let backup = backup_before_recovery(path)?;
+        let settings = AppSettings::default();
+        write_json(path, &settings)?;
+        warn!(operation = "recover_invalid_settings_schema", backup = %backup.display(), "settings with an invalid schema were quarantined and regenerated");
+        return Ok((settings, true, Some(backup.to_string_lossy().into_owned())));
+    };
+    let migrated = migrate(parsed, schema_version)?;
+    if schema_version != CURRENT_SCHEMA_VERSION {
+        let backup = backup_before_recovery(path)?;
+        let settings: AppSettings = serde_json::from_value(migrated.clone()).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SettingsInvalidJson,
+                "設定の migration に失敗しました。",
+                "migrate_settings",
+                error.to_string(),
+                false,
+            )
+        })?;
+        write_json(path, &settings)?;
+        return Ok((settings, true, Some(backup.to_string_lossy().into_owned())));
+    }
+
+    let settings = match serde_json::from_value(migrated) {
+        Ok(settings) => settings,
+        Err(error) => {
+            let backup = backup_before_recovery(path)?;
+            let default_settings = AppSettings::default();
+            write_json(path, &default_settings)?;
+            warn!(operation = "recover_invalid_settings", backup = %backup.display(), "invalid settings were quarantined and regenerated");
+            info!(operation = "recover_invalid_settings", detail = %error, backup = %backup.display(), "invalid settings were quarantined and regenerated");
+            return Ok((
+                default_settings,
+                true,
+                Some(backup.to_string_lossy().into_owned()),
+            ));
+        }
+    };
+    Ok((settings, false, None))
+}
+
+fn backup_before_recovery(path: &Path) -> AppResult<PathBuf> {
+    let backup = path.with_file_name(format!(
+        "{}.bak.{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("settings.json"),
+        timestamp()
+    ));
+    fs::copy(path, &backup).map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsBackupFailed,
+            "元の設定ファイルを退避できませんでした。",
+            "backup_settings",
+            format!("{}: {}", backup.display(), error),
+            false,
+        )
+    })?;
+    Ok(backup)
+}
+
+fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> AppResult<()> {
+    let parent = path.parent().ok_or_else(|| {
+        AppError::simple(
+            ErrorCode::SettingsWriteFailed,
+            "設定ファイルの保存先が不正です。",
+            "write_settings",
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(|error| {
+        AppError::from_io(
+            ErrorCode::SettingsWriteFailed,
+            "create_settings_dir",
+            parent,
+            &error,
+        )
+    })?;
+    let bytes = serde_json::to_vec_pretty(value).map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::SettingsWriteFailed,
+            "設定をシリアライズできませんでした。",
+            "serialize_settings",
+            error.to_string(),
+            false,
+        )
+    })?;
+    fs::write(path, bytes).map_err(|error| {
+        AppError::from_io(
+            ErrorCode::SettingsWriteFailed,
+            "write_settings",
+            path,
+            &error,
+        )
+    })
+}
+
+fn timestamp() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{backup_before_recovery, load_file};
+    use crate::errors::ErrorCode;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "vsedi-{label}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn missing_settings_are_created_with_schema_one() {
+        let path = temp_path("missing").join("settings.json");
+        let (settings, recovered, _) = load_file(&path).unwrap();
+        assert_eq!(settings.schema_version, 1);
+        assert!(!recovered);
+        assert!(path.exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn future_schema_is_not_modified() {
+        let path = temp_path("future").join("settings.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, r#"{"schemaVersion":99,"onboardingCompleted":true}"#).unwrap();
+        let before = fs::read(&path).unwrap();
+        let error = load_file(&path).unwrap_err();
+        assert_eq!(error.code, ErrorCode::SettingsUnsupportedSchema);
+        assert_eq!(before, fs::read(&path).unwrap());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn corrupt_json_is_backed_up_before_regeneration() {
+        let path = temp_path("corrupt").join("settings.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "not-json").unwrap();
+        let (_, recovered, backup) = load_file(&path).unwrap();
+        assert!(recovered);
+        assert!(backup
+            .as_ref()
+            .is_some_and(|backup| std::path::Path::new(backup).exists()));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn invalid_schema_is_backed_up_before_regeneration() {
+        let path = temp_path("schema").join("settings.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, r#"{"onboardingCompleted":true}"#).unwrap();
+        let (settings, recovered, backup) = load_file(&path).unwrap();
+        assert_eq!(settings.schema_version, 1);
+        assert!(recovered);
+        assert!(backup
+            .as_ref()
+            .is_some_and(|backup| std::path::Path::new(backup).exists()));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn backup_is_distinct_from_source() {
+        let path = temp_path("backup").join("settings.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "{}\n").unwrap();
+        let backup = backup_before_recovery(&path).unwrap();
+        assert_ne!(backup, path);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+}

@@ -10,6 +10,20 @@ Web フロントエンドは状態表示とユーザー操作の受付を担当�
 
 Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から TypeScript 型を生成する。
 
+M1 の実装は `src-tauri/src` に次の境界を持つ。`commands` は Tauri の薄い入口、`services` はユースケース、`git` / `platform` / `settings` は具体的な外部状態との接続を担当する。
+
+```text
+src-tauri/src/
+├─ commands/       # inspect_environment / inspect_project / settings / logging
+├─ services/       # diagnostics / projects
+├─ git/            # 固定された Git 診断と repository 判定
+├─ platform/       # app data / log path、PATH executable 探索、OS folder open
+├─ models/         # Rust 正本の共有 DTO
+├─ errors/         # AppError / ErrorCode
+├─ logging/        # 日次ログ、redaction、診断ログ export
+└─ settings/       # settings.json の検証、migration、退避、Tauri Store 保存
+```
+
 ```text
 Frontend UI
     |
@@ -79,6 +93,19 @@ Tauri command は Git の構文ではなく、アプリケーション上の意�
 - `run_shell(command)`
 
 汎用的な抜け道を用意すると、セキュリティ境界がフロントエンド側へ移動し、service layer を設ける意味が失われる。
+
+M1 で実装する command contract は次のとおりである。
+
+| Command | 入力 | 戻り値 | 用途 |
+| --- | --- | --- | --- |
+| `inspect_environment` | なし | `EnvironmentDiagnostic` | OS / architecture / Git / Git LFS 診断 |
+| `inspect_project` | `path: string` | `ProjectDiagnostic` | Unity project と repository の診断 |
+| `load_settings` | なし | `SettingsLoadResult` | 設定読込と stale path の状態表示 |
+| `save_settings` | `AppSettings` | `void` | 許可された内部設定の保存 |
+| `export_diagnostic_log` | `destination: string` | `void` | redaction 済み診断ログの書出し |
+| `open_log_directory` | なし | `void` | OS 標準ファイルマネージャーでログ領域を開く |
+
+Frontend に `run_shell` / `run_git` のような汎用 command は公開しない。folder picker は Tauri dialog plugin の directory picker を使い、選択後の検証は Rust の `inspect_project` が行う。
 
 ## Application Service
 
@@ -174,6 +201,8 @@ PC 初期化・買い替え後の再構成に利用できる、バージョン�
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
+M1 の `settings.json` は `schemaVersion: 1` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。最近利用した project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。
+
 ## Rust / TypeScript 型境界
 
 ADR 0008 に従い、Rust の型定義を正本とする。
@@ -221,6 +250,12 @@ Git の中心ロジックと domain logic は可能な限り OS 非依存にす�
 Tauri の permission は必要最小限にする。JavaScript に広範な shell 実行能力を与えるより、Rust 側で process execution を管理する。
 
 一般的な process / filesystem access を許可する capability の追加は、明示的なセキュリティレビュー対象とする。
+
+M1 の capability は `core:default`、native directory picker 用の `dialog:default`、内部設定用の `store:default` に限定している。Frontend は任意の filesystem API や shell API を持たず、ログフォルダを開く処理も Rust 側でアプリ自身の log directory に固定する。
+
+## M1 実装の検証境界
+
+Rust の unit test と `ts-rs` 型再生成は `src-tauri` の Cargo toolchain が必要である。Windows と Apple Silicon macOS の native 起動・Tauri bundle は各 OS の Rust / Tauri prerequisites が揃った環境で実行する。リポジトリには `pnpm generate-types` と `pnpm check-generated-types` を用意し、生成型は Git 管理する。
 
 ## 現時点で未確定の設計判断
 

@@ -21,7 +21,7 @@
 - フロントエンド技術構成が ADR で決まっている
 - 設定 / 環境バックアップ方針と Rust / TypeScript 型共有方針が ADR で決まっている
 
-## M1 — Tauri 基盤
+## M1 — Tauri 基盤（実装中）
 
 目的: Windows / Apple Silicon macOS で共通のアプリ基盤と Rust command boundary を作る。
 
@@ -58,6 +58,21 @@
 - Rust 側から Git / Git LFS の存在を安全に確認できる
 - Rust の共有型から TypeScript 型を生成できる
 - frontend から任意の Git / shell command を実行できない
+
+実装済みの基盤:
+
+- `src-tauri` に Tauri v2、Rust module 境界、共通 `AppError` / `ErrorCode` を追加
+- React + TypeScript + Vite + pnpm、Tailwind CSS、shadcn/ui 形式の最小 UI を追加
+- `inspect_environment` による system Git / `git lfs version` 診断を追加
+- native directory picker と `inspect_project` による Unity / Git project 診断を追加
+- Tauri Store を使う `settings.json` の schema 検証、migration 前退避、破損復旧、stale path 表示を追加
+- 日次・30日保持の application logging、secret / remote URL redaction、診断ログ export を追加
+- `ts-rs` 再生成コマンドと生成差分検証スクリプトを追加
+
+未検証の環境依存項目:
+
+- Windows native 起動 / bundle
+- Apple Silicon macOS native 起動 / bundle
 
 ## M2 — Unity / VRChat プロジェクト検出
 
