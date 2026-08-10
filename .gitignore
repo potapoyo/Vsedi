@@ -4,3 +4,5 @@ dist/
 src-tauri/target/
 .DS_Store
 *.log
+src-tauri/gen/schemas/macOS-schema.json
+src-tauri/gen/schemas/windows-schema.json
