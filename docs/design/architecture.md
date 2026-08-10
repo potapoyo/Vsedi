@@ -158,13 +158,16 @@ symlink、junction、nested repository、worktree は、対応済みとして扱
 - secret ではない UI 設定
 - window state
 
-初期実装では Tauri Store を基本候補とする。
+初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する。
+
+`settings.json` は整数の `schemaVersion` を持ち、初期値は `1` とする。Explorer / Finder から通常のファイルとしてコピーでき、対応するファイルを所定の場所へ手動配置した場合も Vsedi が読み込めることを非常時の低レベル復旧手段として保証する。
 
 ### 持ち運び可能な環境バックアップ
 
 PC 初期化・買い替え後の再構成に利用できる、バージョン付き JSON をユーザーが明示的に export / import できるようにする。
 
-- `formatVersion` を必須とする
+- ファイル名は `vsedi-environment.vsedi.json` とする
+- `formatVersion` を必須とし、初期値は `1` とする
 - 絶対 path は正本にしない
 - remote URL、Unity version、branch 等の復元に必要な非秘密情報を保持する
 - password / token / SSH private key 等の秘密情報は含めない
@@ -183,15 +186,23 @@ ADR 0008 に従い、Rust の型定義を正本とする。
 
 ## エラーモデル
 
-Rust 側の操作は、少なくとも次を含む構造化エラーを返す。
+ADR 0009 に従い、Rust 側に共通の `AppError` と安定した `ErrorCode` enum を持つ。
 
-- 安定した application error code
-- ユーザーへ安全に表示できる概要
-- 必要に応じた技術的詳細
-- どの処理段階で失敗したか
-- repository の変更が発生した可能性があるか
+`AppError` は少なくとも次を含む。
 
-生の stderr は診断に有用な場合があるが、そのままユーザー向けメッセージとして扱わず、共有用ログへ出力する場合も redact の確認を行う。
+- `code`: Frontend の分岐に使う安定した application error code
+- `message`: ユーザーへ安全に表示できる概要
+- `technicalDetail`: 必要に応じた技術的詳細
+- `operation`: どの処理段階で失敗したか
+- `mayHaveMutated`: repository / filesystem の変更が発生した可能性があるか
+
+`ErrorCode` は `<DOMAIN>_<CAUSE>` を基本とする `SCREAMING_SNAKE_CASE` で serialize する。Frontend は Git stderr や OS error message を文字列解析して条件分岐しない。
+
+Git stderr / OS error は Rust 側で可能な範囲で安定コードへ変換し、生の詳細は必要な場合だけ sanitized な `technicalDetail` / log に保持する。
+
+Git LFS 未導入など、ユーザーが次の行動を取れる「正常な未検出」はエラーではなく診断結果として返す。実行そのものが予期せず失敗した場合だけ `ENV_GIT_LFS_VERSION_FAILED` 等のエラーにする。
+
+`AppError` / `ErrorCode` は ADR 0008 の方針に従い `serde + ts-rs` から TypeScript 型を生成する。
 
 ## OS 固有処理の境界
 
@@ -218,10 +229,9 @@ Tauri の permission は必要最小限にする。JavaScript に広範な shell
 - restore / safety snapshot の具体的な方式
 - GitHub 固有 OAuth
 - updater infrastructure
-- Tauri Store の具体的な schema / file naming
 - `ts-rs` 生成物を Git に含めるか、build/test 時に生成するか
 
-フロントエンド技術構成、設定/環境バックアップ方針、Rust / TypeScript 型共有方針は ADR 0006〜0008 で確定済み。
+フロントエンド技術構成、設定/環境バックアップ方針、Rust / TypeScript 型共有方針、アプリケーションエラーモデルは ADR 0006〜0009 で確定済み。
 
 ## 参考資料
 
