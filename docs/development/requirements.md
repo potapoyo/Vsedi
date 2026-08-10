@@ -39,7 +39,8 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 
 - system Git の存在を検出できる
 - Git version を表示できる
-- Git LFS の存在と version を検出できる
+- Git LFS は、検出済みの Git に対して `git lfs version` を実行し、利用可否と version を診断できる
+- Git LFS executable を Git と独立して探索しない
 - `.gitignore` の状態を診断できる
 - `.gitattributes` の状態を診断できる
 - VPM のソース管理ルールからの明らかな逸脱を警告できる
