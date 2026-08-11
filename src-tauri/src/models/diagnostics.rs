@@ -46,7 +46,6 @@ pub enum ProjectKind {
     Unity,
     VrchatAvatar,
     VrchatWorld,
-    VrchatAvatarAndWorld,
     VrchatUnknown,
 }
 

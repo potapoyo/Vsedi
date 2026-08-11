@@ -127,7 +127,7 @@ M2 の `inspect_project` は読み取り専用で、次の情報を1つの `Proj
 - root `.gitignore` とVPM用 `Packages/.gitignore` の状態
 - 設定で選択したVPM package追跡方針との一致
 
-Avatar / World 判定は package ID を根拠にする。両方が存在する場合や VRChat package はあるが種別 package がない場合は推測で正常扱いせず、要確認とする。
+Avatar / World 判定は package ID を根拠にする。両方が存在する場合は非対応エラーとして診断を停止する。VRChat package はあるが種別 package がない場合は推測で正常扱いせず、要確認とする。ProjectVersion、manifest、ignore設定などの読み取り不能は警告として記録し、読み取れる範囲の診断を継続する。
 
 Git repository rootがUnity project外にある構成は関連ファイルを同じrepositoryで管理できる正常な構成として、`INFO`の診断理由を返す。
 

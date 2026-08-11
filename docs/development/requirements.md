@@ -30,6 +30,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - ユーザーが project directory を選択できる
 - Unity project として妥当か検査できる
 - VRChat / VPM project の可能性を診断できる
+- Avatar SDK と Worlds SDK が同居する project は非対応エラーとして停止できる
 - Git repository の有無を検出できる
 - 最近利用した project を一覧できる
 - project folder を Finder / Explorer で開ける
@@ -43,6 +44,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - VPM packageをGit管理から除外するか含めるかを設定できる
 - 選択したVPM追跡方針からの明らかな逸脱を警告できる
 - Git repository rootがUnity project外にある状態を正常な構成として情報表示できる
+- project 設定ファイルを読み取れない場合に警告し、読み取れる範囲の診断を継続できる
 
 ### リポジトリ初期化
 

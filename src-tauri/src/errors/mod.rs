@@ -9,6 +9,7 @@ pub enum ErrorCode {
     ProjectNotFound,
     ProjectPermissionDenied,
     ProjectInvalidUnity,
+    ProjectUnsupportedKind,
     SettingsReadFailed,
     SettingsWriteFailed,
     SettingsInvalidJson,

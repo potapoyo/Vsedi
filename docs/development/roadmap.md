@@ -83,9 +83,11 @@
 - Unity version / project metadata reading
 - VPM / VRChat project detection
 - Avatar / World 判定の調査と可能な範囲での実装
+- Avatar SDK と Worlds SDK が同居する project の拒否
 - existing Git repository detection
 - `.gitignore` diagnostics
 - 選択可能なVPM package source-control diagnostics
+- 読み取り不能な project 設定ファイルの警告
 
 完了条件:
 

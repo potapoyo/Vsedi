@@ -265,7 +265,6 @@ function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) {
     UNITY: "Unity project",
     VRCHAT_AVATAR: "VRChat Avatar",
     VRCHAT_WORLD: "VRChat World",
-    VRCHAT_AVATAR_AND_WORLD: "VRChat Avatar + World",
     VRCHAT_UNKNOWN: "VRChat 種別不明",
   };
   return labels[kind];

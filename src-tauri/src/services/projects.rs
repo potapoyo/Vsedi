@@ -97,7 +97,7 @@ pub fn inspect_project(
 
     let (unity_version, unity_revision) = read_unity_metadata(&project_version_path, &mut issues);
     let vpm = inspect_vpm(&root, &mut issues);
-    let project_kind = classify_project(&vpm.packages, &mut issues);
+    let project_kind = classify_project(&vpm.packages, &mut issues)?;
     let repository = inspect_repository(&root, &mut issues);
     let source_control =
         inspect_source_control(&root, &vpm, &repository, vpm_tracking_policy, &mut issues);
@@ -155,7 +155,7 @@ fn read_unity_metadata(
         Err(error) => {
             issues.push(issue(
                 "UNITY_PROJECT_VERSION_UNREADABLE",
-                DiagnosticSeverity::Error,
+                DiagnosticSeverity::Warning,
                 format!("Unity version metadata を読み取れません: {error}"),
                 Some("ProjectSettings/ProjectVersion.txt".to_owned()),
             ));
@@ -227,7 +227,7 @@ fn read_package_manifest(
         Err(error) => {
             issues.push(issue(
                 "PACKAGE_MANIFEST_UNREADABLE",
-                DiagnosticSeverity::Error,
+                DiagnosticSeverity::Warning,
                 format!("package manifest を読み取れません: {error}"),
                 Some(relative),
             ));
@@ -260,7 +260,10 @@ fn read_package_manifest(
     }
 }
 
-fn classify_project(packages: &[VpmPackage], issues: &mut Vec<ProjectIssue>) -> ProjectKind {
+fn classify_project(
+    packages: &[VpmPackage],
+    issues: &mut Vec<ProjectIssue>,
+) -> AppResult<ProjectKind> {
     let has_avatar = packages
         .iter()
         .any(|item| item.name == "com.vrchat.avatars");
@@ -269,17 +272,13 @@ fn classify_project(packages: &[VpmPackage], issues: &mut Vec<ProjectIssue>) -> 
         .iter()
         .any(|item| item.name.starts_with("com.vrchat."));
     match (has_avatar, has_world, has_vrchat) {
-        (true, false, _) => ProjectKind::VrchatAvatar,
-        (false, true, _) => ProjectKind::VrchatWorld,
-        (true, true, _) => {
-            issues.push(issue(
-                "VRCHAT_PROJECT_KIND_MIXED",
-                DiagnosticSeverity::Warning,
-                "Avatar SDK と Worlds SDK の両方が見つかりました。project 種別を確認してください。",
-                Some("Packages".to_owned()),
-            ));
-            ProjectKind::VrchatAvatarAndWorld
-        }
+        (true, false, _) => Ok(ProjectKind::VrchatAvatar),
+        (false, true, _) => Ok(ProjectKind::VrchatWorld),
+        (true, true, _) => Err(AppError::simple(
+            ErrorCode::ProjectUnsupportedKind,
+            "Avatar SDK と Worlds SDK が同居しているため、この project は取り扱えません。",
+            "inspect_project",
+        )),
         (false, false, true) => {
             issues.push(issue(
                 "VRCHAT_PROJECT_KIND_UNKNOWN",
@@ -287,9 +286,9 @@ fn classify_project(packages: &[VpmPackage], issues: &mut Vec<ProjectIssue>) -> 
                 "VRChat package はありますが、Avatar / World を確定できません。",
                 Some("Packages".to_owned()),
             ));
-            ProjectKind::VrchatUnknown
+            Ok(ProjectKind::VrchatUnknown)
         }
-        _ => ProjectKind::Unity,
+        _ => Ok(ProjectKind::Unity),
     }
 }
 
@@ -374,7 +373,7 @@ fn inspect_gitignore(root: &Path, issues: &mut Vec<ProjectIssue>) -> ConfigFileD
     let Ok(text) = fs::read_to_string(&path) else {
         issues.push(issue(
             "GITIGNORE_UNREADABLE",
-            DiagnosticSeverity::Error,
+            DiagnosticSeverity::Warning,
             ".gitignore を読み取れません。",
             Some(relative.clone()),
         ));
@@ -434,7 +433,7 @@ fn inspect_vpm_source_control(
             Err(_) => {
                 issues.push(issue(
                     "VPM_GITIGNORE_UNREADABLE",
-                    DiagnosticSeverity::Error,
+                    DiagnosticSeverity::Warning,
                     "Packages/.gitignore を読み取れません。",
                     Some(relative.clone()),
                 ));
@@ -741,6 +740,39 @@ mod tests {
 
         let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.project_kind, ProjectKind::VrchatWorld);
+    }
+
+    #[test]
+    fn rejects_projects_with_avatar_and_world_sdks() {
+        let fixture = Fixture::new("mixed-vrchat-project");
+        fixture.unity(r#"{"com.vrchat.avatars":"3.10.4","com.vrchat.worlds":"3.10.4"}"#);
+
+        let error = inspect_project(
+            fixture.path().to_str().expect("path"),
+            VpmTrackingPolicy::ExcludePackages,
+        )
+        .expect_err("mixed VRChat project must be rejected");
+        assert_eq!(error.code, crate::errors::ErrorCode::ProjectUnsupportedKind);
+        assert!(error.message.contains("Avatar SDK と Worlds SDK"));
+    }
+
+    #[test]
+    fn reports_unreadable_settings_as_warnings() {
+        let fixture = Fixture::new("unreadable-settings");
+        fixture.unity("{}");
+        fs::write(fixture.path().join(".gitignore"), [0xff, 0xfe]).expect("unreadable gitignore");
+        fs::write(fixture.path().join("Packages/manifest.json"), [0xff, 0xfe])
+            .expect("unreadable package manifest");
+
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
+        assert_eq!(result.status, ProjectStatus::NeedsAttention);
+        assert!(result.issues.iter().any(|item| {
+            item.code == "GITIGNORE_UNREADABLE" && item.severity == DiagnosticSeverity::Warning
+        }));
+        assert!(result.issues.iter().any(|item| {
+            item.code == "PACKAGE_MANIFEST_UNREADABLE"
+                && item.severity == DiagnosticSeverity::Warning
+        }));
     }
 
     #[test]
