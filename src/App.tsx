@@ -207,7 +207,7 @@ function MainWindow() {
                       {project.issues.map((issue, index) => (
                         <div key={`${issue.code}-${index}`} className={issueClass(issue.severity)}>
                           <p className="text-sm font-medium">{issue.message}</p>
-                          <p className="mt-1 text-xs opacity-70">{issue.code}{issue.path ? ` · ${issue.path}` : ""}</p>
+                          <p className="mt-1 text-xs opacity-70">{issue.code}{shouldShowIssuePath(issue) ? ` · ${issue.path}` : ""}</p>
                         </div>
                       ))}
                     </div>
@@ -284,6 +284,10 @@ function issueClass(severity: ProjectDiagnostic["issues"][number]["severity"]) {
   if (severity === "ERROR") return "rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800";
   if (severity === "WARNING") return "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900";
   return "rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-800";
+}
+
+function shouldShowIssuePath(issue: ProjectDiagnostic["issues"][number]) {
+  return issue.code !== "GIT_ROOT_OUTSIDE_PROJECT" && Boolean(issue.path);
 }
 
 export default App;

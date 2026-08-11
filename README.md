@@ -132,6 +132,16 @@ macOS のデスクトップGUIを起動して確認する場合は、次を実�
 pnpm tauri dev
 ```
 
+#### macOS の DMG build
+
+macOSではDMGのFinder装飾にApple Events権限が必要になる場合があります。配布用DMGを権限なしで再現可能に生成するには、Finder装飾を省略して次を実行します。
+
+```sh
+pnpm tauri:build:macos
+```
+
+生成されたDMGは `src-tauri/target/release/bundle/dmg/` で確認します。
+
 #### 人が行うGUI確認
 
 これは自動E2Eではなく、アプリがネイティブウィンドウとして起動し、主要な診断操作ができることを確認するための目視スモークテストです。

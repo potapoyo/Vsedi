@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:build:macos": "env CI=true tauri build",
     "typecheck": "tsc --noEmit",
     "generate-types": "cargo run --manifest-path src-tauri/Cargo.toml --bin export_types",
     "check-generated-types": "sh scripts/check-generated-types.sh"
