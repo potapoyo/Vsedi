@@ -69,9 +69,7 @@ pub(crate) fn open_directory(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         let output = Command::new("/usr/bin/open")
-            .arg("-a")
-            .arg("/System/Library/CoreServices/Finder.app")
-            .arg(path)
+            .args(macos_open_directory_arguments(path))
             .output()?;
         let status = output.status;
         if status.success() {
@@ -104,5 +102,28 @@ pub(crate) fn open_directory(path: &Path) -> io::Result<()> {
             io::ErrorKind::Unsupported,
             "opening a directory is unsupported on this platform",
         ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_open_directory_arguments(path: &Path) -> [OsString; 3] {
+    [
+        OsString::from("-b"),
+        OsString::from("com.apple.finder"),
+        path.as_os_str().to_owned(),
+    ]
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opens_directory_with_finder_bundle_identifier() {
+        let path = Path::new("/tmp/Vsedi logs");
+        let arguments = macos_open_directory_arguments(path);
+        assert_eq!(arguments[0], "-b");
+        assert_eq!(arguments[1], "com.apple.finder");
+        assert_eq!(arguments[2], path.as_os_str());
     }
 }
