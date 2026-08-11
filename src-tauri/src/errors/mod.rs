@@ -6,10 +6,10 @@ use ts_rs::TS;
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     EnvGitVersionFailed,
-    EnvGitLfsVersionFailed,
     ProjectNotFound,
     ProjectPermissionDenied,
     ProjectInvalidUnity,
+    ProjectUnsupportedKind,
     SettingsReadFailed,
     SettingsWriteFailed,
     SettingsInvalidJson,

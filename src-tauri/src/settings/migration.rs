@@ -13,8 +13,14 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
         ));
     }
 
-    if schema_version < CURRENT_SCHEMA_VERSION {
-        if let Some(object) = value.as_object_mut() {
+    if let Some(object) = value.as_object_mut() {
+        if schema_version < 2 {
+            object.insert(
+                "vpmTrackingPolicy".to_owned(),
+                Value::from("EXCLUDE_PACKAGES"),
+            );
+        }
+        if schema_version < CURRENT_SCHEMA_VERSION {
             object.insert(
                 "schemaVersion".to_owned(),
                 Value::from(CURRENT_SCHEMA_VERSION),
@@ -22,4 +28,26 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
         }
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate;
+    use serde_json::json;
+
+    #[test]
+    fn schema_one_defaults_to_excluding_vpm_packages() {
+        let migrated = migrate(
+            json!({
+                "schemaVersion": 1,
+                "recentProjects": [{ "path": "/project", "lastOpenedAt": null }]
+            }),
+            1,
+        )
+        .expect("migration");
+
+        assert_eq!(migrated["schemaVersion"], 2);
+        assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
+        assert_eq!(migrated["recentProjects"][0]["path"], "/project");
+    }
 }

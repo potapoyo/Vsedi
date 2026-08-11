@@ -3,16 +3,18 @@ import type {
   AppError,
   AppSettings,
   EnvironmentDiagnostic,
+  LogSnapshot,
   ProjectDiagnostic,
   SettingsLoadResult,
+  VpmTrackingPolicy,
 } from "@/generated/bindings";
 
 export function inspectEnvironment() {
   return invoke<EnvironmentDiagnostic>("inspect_environment");
 }
 
-export function inspectProject(path: string) {
-  return invoke<ProjectDiagnostic>("inspect_project", { path });
+export function inspectProject(path: string, vpmTrackingPolicy: VpmTrackingPolicy) {
+  return invoke<ProjectDiagnostic>("inspect_project", { path, vpmTrackingPolicy });
 }
 
 export function loadSettings() {
@@ -29,6 +31,14 @@ export function exportDiagnosticLog(destination: string) {
 
 export function openLogDirectory() {
   return invoke<void>("open_log_directory");
+}
+
+export function openLogWindow() {
+  return invoke<void>("open_log_window");
+}
+
+export function readRecentLogs() {
+  return invoke<LogSnapshot>("read_recent_logs");
 }
 
 export function isAppError(error: unknown): error is AppError {

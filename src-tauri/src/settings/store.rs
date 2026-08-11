@@ -98,6 +98,7 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
         })?,
     );
     store.set("logLevel", json!(settings.log_level));
+    store.set("vpmTrackingPolicy", json!(settings.vpm_tracking_policy));
     store.save().map_err(|error| {
         AppError::with_detail(
             ErrorCode::SettingsWriteFailed,
@@ -246,6 +247,7 @@ fn timestamp() -> u128 {
 mod tests {
     use super::{backup_before_recovery, load_file};
     use crate::errors::ErrorCode;
+    use crate::models::CURRENT_SCHEMA_VERSION;
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -262,10 +264,10 @@ mod tests {
     }
 
     #[test]
-    fn missing_settings_are_created_with_schema_one() {
+    fn missing_settings_are_created_with_current_schema() {
         let path = temp_path("missing").join("settings.json");
         let (settings, recovered, _) = load_file(&path).unwrap();
-        assert_eq!(settings.schema_version, 1);
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(!recovered);
         assert!(path.exists());
         let _ = fs::remove_dir_all(path.parent().unwrap());
@@ -302,7 +304,7 @@ mod tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, r#"{"onboardingCompleted":true}"#).unwrap();
         let (settings, recovered, backup) = load_file(&path).unwrap();
-        assert_eq!(settings.schema_version, 1);
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(recovered);
         assert!(backup
             .as_ref()

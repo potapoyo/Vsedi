@@ -1,6 +1,6 @@
 # ADR 0009: アプリケーションエラーモデル
 
-- 状態: 採用
+- 状態: 一部置換（Git LFS診断部分をADR 0012で置換）
 - 日付: 2026-08-10
 
 ## 背景
@@ -33,10 +33,10 @@ Rust の `ErrorCode` は Frontend へ `SCREAMING_SNAKE_CASE` の安定コード�
 ```text
 ENV_GIT_NOT_FOUND
 ENV_GIT_VERSION_FAILED
-ENV_GIT_LFS_VERSION_FAILED
 PROJECT_NOT_FOUND
 PROJECT_PERMISSION_DENIED
 PROJECT_INVALID_UNITY
+PROJECT_UNSUPPORTED_KIND
 GIT_REPOSITORY_NOT_FOUND
 GIT_COMMAND_FAILED
 SETTINGS_READ_FAILED
@@ -79,9 +79,7 @@ INTERNAL_ERROR
 
 例:
 
-- Git LFS が未導入 → `GitLfsDiagnostic { status: NotInstalled, version: None }`
 - Git が見つからない → 環境診断 command の通常レスポンス内で `NotInstalled` として返せる場合は診断状態として返す
-- `git lfs version` の実行自体が予期しない理由で失敗した → `ENV_GIT_LFS_VERSION_FAILED`
 
 これにより、Frontend は「ユーザーが次に行動できる診断状態」と「処理が成立しなかったエラー」を区別できる。
 

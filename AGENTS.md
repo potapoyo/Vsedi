@@ -19,6 +19,28 @@ git -c user.name='Codex' -c user.email='codex@users.noreply.github.com' commit -
 
 `git -c` はその1回のGit実行にだけ有効なため、repo-local、global、system のGit設定を変更しない。コミットを生成する `merge`、`cherry-pick`、`revert` などをCodexが実行する場合も、同じ一時指定を付ける。
 
+### PC識別子の記録
+
+PCが複数あるため、Codexが作成するコミットには、コミットメッセージの trailer として実行元PCの識別子を記録する。識別子は各PCの短いホスト名を `hostname -s` で取得し、`Codex-PC` のキーで追加する。
+
+通常のコミット例:
+
+```sh
+git -c user.name='Codex' -c user.email='codex@users.noreply.github.com' commit \
+  -m '変更内容' \
+  -m "Codex-PC: $(hostname -s)"
+```
+
+ホスト名がPCを特定するのに適さない場合は、そのPCごとに決めた短い固定識別子（例: `mac-mini`, `macbook`, `windows-pc`）を `Codex-PC` の値として使用する。PC識別子はGitのAuthor / Committer identityには含めず、GitHubのコミット紐付けを維持する。
+
+確認例:
+
+```sh
+git log -1 --format='%h%n%B'
+```
+
+コミットを生成する `merge`、`cherry-pick`、`revert` などでも、メッセージを編集できる場合は同じ `Codex-PC: <識別子>` trailer を追加する。
+
 ### 禁止事項と確認
 
 - `git config user.name` / `git config user.email` を、`--local`、`--global`、`--system` のいずれでも、Codex用identityを恒久設定する目的で実行しない

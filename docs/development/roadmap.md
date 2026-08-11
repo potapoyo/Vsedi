@@ -44,7 +44,6 @@
 - native folder picker
 - Git executable detection
 - Git version detection
-- Git LFS detection
 - アプリ内部設定用ローカル store の初期基盤
 - structured / sanitized logging
 - Windows native build check
@@ -55,7 +54,7 @@
 - 両 OS でアプリが起動する
 - 両 OS でネイティブビルドが成功する
 - project folder を選べる
-- Rust 側から Git / Git LFS の存在を安全に確認できる
+- Rust 側から Git の存在を安全に確認できる
 - Rust の共有型から TypeScript 型を生成できる
 - frontend から任意の Git / shell command を実行できない
 
@@ -63,7 +62,7 @@
 
 - `src-tauri` に Tauri v2、Rust module 境界、共通 `AppError` / `ErrorCode` を追加
 - React + TypeScript + Vite + pnpm、Tailwind CSS、shadcn/ui 形式の最小 UI を追加
-- `inspect_environment` による system Git / `git lfs version` 診断を追加
+- `inspect_environment` による system Git 診断を追加
 - native directory picker と `inspect_project` による Unity / Git project 診断を追加
 - Tauri Store を使う `settings.json` の schema 検証、migration 前退避、破損復旧、stale path 表示を追加
 - 日次・30日保持の application logging、secret / remote URL redaction、診断ログ export を追加
@@ -84,11 +83,11 @@
 - Unity version / project metadata reading
 - VPM / VRChat project detection
 - Avatar / World 判定の調査と可能な範囲での実装
+- Avatar SDK と Worlds SDK が同居する project の拒否
 - existing Git repository detection
 - `.gitignore` diagnostics
-- `.gitattributes` diagnostics
-- VPM package source-control diagnostics
-- large file diagnostics
+- 選択可能なVPM package source-control diagnostics
+- 読み取り不能な project 設定ファイルの警告
 
 完了条件:
 
@@ -166,9 +165,9 @@ M0〜M4 を **Vsedi Core** とする。
 - environment backup export / import
 - remote URL / branch / Unity version / VCC・ALCOM 参考情報の保存
 - absolute path 非依存の復元設計
-- Git / Git LFS / Unity / VCC / ALCOM の環境診断
+- Git / Unity / VCC / ALCOM の環境診断
 - restore destination selection
-- remote clone / Git LFS restore
+- remote clone
 - Unity / VPM compatibility diagnostics
 - VCC / ALCOM から利用可能な状態かの診断
 - restored project registration
@@ -192,8 +191,6 @@ M0〜M4 を **Vsedi Core** とする。
 - VPM ignore rules
 - VRChat SDK / package accidental commit detection
 - `.meta` consistency diagnostics
-- LFS recommendations
-- large binary warnings
 - SDK / package update checkpoint guidance
 - Unity version update checkpoint guidance
 - public repository / purchased asset warning design

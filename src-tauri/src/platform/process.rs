@@ -68,13 +68,34 @@ pub(crate) fn run(
 pub(crate) fn open_directory(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("open").arg(path).status()?;
-        Ok(())
+        let output = Command::new("/usr/bin/open")
+            .arg("-a")
+            .arg("/System/Library/CoreServices/Finder.app")
+            .arg(path)
+            .output()?;
+        let status = output.status;
+        if status.success() {
+            Ok(())
+        } else {
+            let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let message = if detail.is_empty() {
+                format!("open exited with status {status}")
+            } else {
+                format!("open exited with status {status}: {detail}")
+            };
+            Err(io::Error::other(message))
+        }
     }
     #[cfg(windows)]
     {
-        Command::new("explorer.exe").arg(path).status()?;
-        Ok(())
+        let status = Command::new("explorer.exe").arg(path).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "explorer.exe exited with status {status}"
+            )))
+        }
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {

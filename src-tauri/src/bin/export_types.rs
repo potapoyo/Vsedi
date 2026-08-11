@@ -3,9 +3,11 @@ use ts_rs::{Config, TS};
 use vsedi_lib::{
     errors::{AppError, ErrorCode},
     models::{
-        AppSettings, DiagnosticStatus, EnvironmentDiagnostic, GitDiagnostic, GitLfsDiagnostic,
-        PlatformDiagnostic, ProjectDiagnostic, ProjectStatus, RecentProject, RecentProjectStatus,
-        SettingsLoadResult,
+        AppSettings, ConfigFileDiagnostic, DiagnosticSeverity, DiagnosticStatus,
+        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, LogSnapshot,
+        PlatformDiagnostic, ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus,
+        RecentProject, RecentProjectStatus, RepositoryDiagnostic, SettingsLoadResult,
+        SourceControlDiagnostic, VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
     },
 };
 
@@ -15,16 +17,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ErrorCode::export_to_string(&config)?,
         AppError::export_to_string(&config)?,
         DiagnosticStatus::export_to_string(&config)?,
-        GitLfsDiagnostic::export_to_string(&config)?,
         GitDiagnostic::export_to_string(&config)?,
         PlatformDiagnostic::export_to_string(&config)?,
         EnvironmentDiagnostic::export_to_string(&config)?,
         ProjectStatus::export_to_string(&config)?,
+        ProjectKind::export_to_string(&config)?,
+        DiagnosticSeverity::export_to_string(&config)?,
+        FileDiagnosticStatus::export_to_string(&config)?,
+        ProjectIssue::export_to_string(&config)?,
+        ConfigFileDiagnostic::export_to_string(&config)?,
+        VpmPackage::export_to_string(&config)?,
+        VpmDiagnostic::export_to_string(&config)?,
+        RepositoryDiagnostic::export_to_string(&config)?,
+        SourceControlDiagnostic::export_to_string(&config)?,
         ProjectDiagnostic::export_to_string(&config)?,
         RecentProject::export_to_string(&config)?,
         RecentProjectStatus::export_to_string(&config)?,
+        VpmTrackingPolicy::export_to_string(&config)?,
         AppSettings::export_to_string(&config)?,
         SettingsLoadResult::export_to_string(&config)?,
+        LogSnapshot::export_to_string(&config)?,
     ]
     .into_iter()
     .map(strip_imports)

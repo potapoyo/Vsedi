@@ -1,8 +1,10 @@
+use crate::models::LogSnapshot;
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
     platform::paths::app_log_dir,
 };
 use std::{
+    collections::VecDeque,
     fs,
     io::Write,
     path::Path,
@@ -153,6 +155,60 @@ pub fn export_diagnostic_log(app: &AppHandle, destination: &Path) -> AppResult<(
         })?;
     }
     Ok(())
+}
+
+pub fn read_recent_logs(app: &AppHandle, max_lines: usize) -> AppResult<LogSnapshot> {
+    let source_dir = app_log_dir(app)?;
+    let mut files = fs::read_dir(&source_dir)
+        .map_err(|error| {
+            AppError::from_io(
+                ErrorCode::FilesystemReadFailed,
+                "read_log_dir",
+                &source_dir,
+                &error,
+            )
+        })?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("vsedi.log"))
+        })
+        .collect::<Vec<_>>();
+    files.sort();
+
+    let current_file = files
+        .last()
+        .and_then(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned());
+    let mut lines = VecDeque::with_capacity(max_lines.min(500));
+    for file in files {
+        let content = fs::read_to_string(&file).map_err(|error| {
+            AppError::from_io(
+                ErrorCode::FilesystemReadFailed,
+                "read_log_file",
+                &file,
+                &error,
+            )
+        })?;
+        for line in redact_for_export(&content).lines() {
+            if max_lines == 0 {
+                continue;
+            }
+            lines.push_back(line.to_owned());
+            if lines.len() > max_lines {
+                lines.pop_front();
+            }
+        }
+    }
+
+    Ok(LogSnapshot {
+        lines: lines.into_iter().collect(),
+        current_file,
+    })
 }
 
 pub fn sanitize_text(input: &str) -> String {
