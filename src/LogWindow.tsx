@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button } from "@/components/ui/button";
 import type { AppError, LogSnapshot } from "@/generated/bindings";
 import { isAppError, readRecentLogs } from "@/lib/commands";
 
@@ -36,13 +34,9 @@ export function LogWindow() {
 
   return (
     <main className="flex h-screen flex-col bg-mist p-6 text-ink">
-      <header className="flex items-center justify-between gap-4 pb-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.28em] text-accent">Vsedi diagnostics</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">リアルタイムログ</h1>
-          <p className="mt-1 text-xs text-slate-500">1秒ごとに最新ログを読み込みます。{logs?.currentFile ? ` 現在のファイル: ${logs.currentFile}` : ""}</p>
-        </div>
-        <Button variant="secondary" onClick={() => void getCurrentWindow().close()}>閉じる</Button>
+      <header className="pb-4">
+        <p className="text-xs font-bold uppercase tracking-[0.28em] text-accent">Vsedi diagnostics</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight">リアルタイムログ</h1>
       </header>
 
       {error && (
