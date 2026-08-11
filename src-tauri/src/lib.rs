@@ -26,6 +26,7 @@ pub fn run() {
             commands::settings::save_settings,
             commands::logging::export_diagnostic_log,
             commands::logging::open_log_directory,
+            commands::logging::open_log_window,
             commands::logging::read_recent_logs
         ])
         .run(tauri::generate_context!())

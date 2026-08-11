@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { AppError, EnvironmentDiagnostic, LogSnapshot, ProjectDiagnostic, SettingsLoadResult, VpmTrackingPolicy } from "@/generated/bindings";
-import { exportDiagnosticLog, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, readRecentLogs, saveSettings } from "@/lib/commands";
+import { LogWindow } from "@/LogWindow";
+import type { AppError, EnvironmentDiagnostic, ProjectDiagnostic, SettingsLoadResult, VpmTrackingPolicy } from "@/generated/bindings";
+import { exportDiagnosticLog, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, saveSettings } from "@/lib/commands";
 
 function App() {
+  if (currentWindowLabel() === "logs") return <LogWindow />;
+  return <MainWindow />;
+}
+
+function MainWindow() {
   const [environment, setEnvironment] = useState<EnvironmentDiagnostic | null>(null);
   const [settings, setSettings] = useState<SettingsLoadResult | null>(null);
   const [project, setProject] = useState<ProjectDiagnostic | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
-  const [logsOpen, setLogsOpen] = useState(false);
-  const [logs, setLogs] = useState<LogSnapshot | null>(null);
 
   const refresh = async () => {
     setBusy(true);
@@ -35,25 +40,6 @@ function App() {
   useEffect(() => {
     void refresh();
   }, []);
-
-  useEffect(() => {
-    if (!logsOpen) return;
-    let active = true;
-    const loadLogs = async () => {
-      try {
-        const snapshot = await readRecentLogs();
-        if (active) setLogs(snapshot);
-      } catch (caught) {
-        if (active) setError(normalizeError(caught));
-      }
-    };
-    void loadLogs();
-    const timer = window.setInterval(() => void loadLogs(), 1000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [logsOpen]);
 
   const gitTone = environment?.git.status === "AVAILABLE" ? "good" : "warn";
   const chooseProject = async () => {
@@ -110,6 +96,14 @@ function App() {
     }
   };
 
+  const showLogWindow = async () => {
+    try {
+      await openLogWindow();
+    } catch (caught) {
+      setError(normalizeError(caught));
+    }
+  };
+
   const platformLabel = useMemo(() => {
     if (!environment) return "確認中";
     return `${environment.platform.os} / ${environment.platform.architecture}`;
@@ -125,7 +119,7 @@ function App() {
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">Unity / VRChat project の状態を確認し、作業を安全に保存するためのローカルデスクトップ基盤。</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setLogsOpen(true)}>ログ表示</Button>
+            <Button variant="ghost" onClick={() => void showLogWindow()}>ログ表示</Button>
             <Button variant="ghost" onClick={() => void showLogDirectory()}>ログフォルダ</Button>
             <Button variant="secondary" onClick={() => void exportLog()}>診断ログを書き出す</Button>
           </div>
@@ -237,22 +231,16 @@ function App() {
         <footer className="mt-8 flex items-center justify-between text-xs text-slate-400"><span>Rust command boundary · structured diagnostics</span><Button variant="ghost" onClick={() => void refresh()} disabled={busy}>{busy ? "確認中…" : "再診断"}</Button></footer>
       </div>
 
-      {logsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-6 py-8" role="dialog" aria-modal="true" aria-label="アプリケーションログ">
-          <section className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
-                <h2 className="font-semibold text-ink">リアルタイムログ</h2>
-                <p className="mt-1 text-xs text-slate-500">1秒ごとに最新ログを読み込みます。{logs?.currentFile ? ` 現在のファイル: ${logs.currentFile}` : ""}</p>
-              </div>
-              <Button variant="secondary" onClick={() => setLogsOpen(false)}>閉じる</Button>
-            </header>
-            <pre className="min-h-64 flex-1 overflow-auto whitespace-pre-wrap bg-slate-950 px-5 py-4 font-mono text-xs leading-5 text-slate-100">{logs?.lines.length ? logs.lines.join("\n") : "ログはまだありません。"}</pre>
-          </section>
-        </div>
-      )}
     </main>
   );
+}
+
+function currentWindowLabel() {
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeError(error: unknown): AppError {
