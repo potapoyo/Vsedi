@@ -35,8 +35,7 @@ export function LogWindow() {
   return (
     <main className="flex h-screen flex-col bg-mist p-6 text-ink">
       <header className="pb-4">
-        <p className="text-xs font-bold uppercase tracking-[0.28em] text-accent">Vsedi diagnostics</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">リアルタイムログ</h1>
+        <p className="text-xs text-slate-500">1秒ごとに最新ログを読み込みます。{logs?.currentFile ? ` 現在のファイル: ${logs.currentFile}` : ""}</p>
       </header>
 
       {error && (
