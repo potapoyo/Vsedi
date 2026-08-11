@@ -3,6 +3,7 @@ import type {
   AppError,
   AppSettings,
   EnvironmentDiagnostic,
+  LogSnapshot,
   ProjectDiagnostic,
   SettingsLoadResult,
   VpmTrackingPolicy,
@@ -30,6 +31,10 @@ export function exportDiagnosticLog(destination: string) {
 
 export function openLogDirectory() {
   return invoke<void>("open_log_directory");
+}
+
+export function readRecentLogs() {
+  return invoke<LogSnapshot>("read_recent_logs");
 }
 
 export function isAppError(error: unknown): error is AppError {

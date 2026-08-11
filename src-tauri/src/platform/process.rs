@@ -68,13 +68,25 @@ pub(crate) fn run(
 pub(crate) fn open_directory(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("open").arg(path).status()?;
-        Ok(())
+        let status = Command::new("/usr/bin/open").arg(path).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "open exited with status {status}"
+            )))
+        }
     }
     #[cfg(windows)]
     {
-        Command::new("explorer.exe").arg(path).status()?;
-        Ok(())
+        let status = Command::new("explorer.exe").arg(path).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "explorer.exe exited with status {status}"
+            )))
+        }
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {

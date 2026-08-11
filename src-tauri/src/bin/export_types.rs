@@ -4,10 +4,10 @@ use vsedi_lib::{
     errors::{AppError, ErrorCode},
     models::{
         AppSettings, ConfigFileDiagnostic, DiagnosticSeverity, DiagnosticStatus,
-        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, PlatformDiagnostic,
-        ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RecentProject,
-        RecentProjectStatus, RepositoryDiagnostic, SettingsLoadResult, SourceControlDiagnostic,
-        VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
+        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, LogSnapshot,
+        PlatformDiagnostic, ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus,
+        RecentProject, RecentProjectStatus, RepositoryDiagnostic, SettingsLoadResult,
+        SourceControlDiagnostic, VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
     },
 };
 
@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         VpmTrackingPolicy::export_to_string(&config)?,
         AppSettings::export_to_string(&config)?,
         SettingsLoadResult::export_to_string(&config)?,
+        LogSnapshot::export_to_string(&config)?,
     ]
     .into_iter()
     .map(strip_imports)

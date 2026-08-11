@@ -43,3 +43,5 @@ export type VpmTrackingPolicy = "EXCLUDE_PACKAGES" | "INCLUDE_PACKAGES";
 export type AppSettings = { schemaVersion: number, onboardingCompleted: boolean, recentProjects: Array<RecentProject>, logLevel: string, vpmTrackingPolicy: VpmTrackingPolicy, };
 
 export type SettingsLoadResult = { settings: AppSettings, recovered: boolean, backupPath: string | null, recentProjects: Array<RecentProjectStatus>, };
+
+export type LogSnapshot = { lines: Array<string>, currentFile: string | null, };

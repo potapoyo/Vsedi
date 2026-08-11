@@ -1,6 +1,7 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
     logging,
+    models::LogSnapshot,
     platform::{paths::app_log_dir, process::open_directory},
 };
 use std::path::Path;
@@ -39,4 +40,9 @@ pub fn open_log_directory(app: AppHandle) -> AppResult<()> {
             false,
         )
     })
+}
+
+#[tauri::command]
+pub fn read_recent_logs(app: AppHandle) -> AppResult<LogSnapshot> {
+    logging::read_recent_logs(&app, 500)
 }

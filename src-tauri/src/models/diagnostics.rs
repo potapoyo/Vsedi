@@ -138,3 +138,10 @@ pub struct SettingsLoadResult {
     pub backup_path: Option<String>,
     pub recent_projects: Vec<crate::models::settings::RecentProjectStatus>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LogSnapshot {
+    pub lines: Vec<String>,
+    pub current_file: Option<String>,
+}
