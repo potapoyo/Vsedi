@@ -3,7 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { AppError, EnvironmentDiagnostic, ProjectDiagnostic, SettingsLoadResult } from "@/generated/bindings";
+import type { AppError, EnvironmentDiagnostic, ProjectDiagnostic, SettingsLoadResult, VpmTrackingPolicy } from "@/generated/bindings";
 import { exportDiagnosticLog, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, saveSettings } from "@/lib/commands";
 
 function App() {
@@ -21,7 +21,7 @@ function App() {
       setEnvironment(environmentResult);
       setSettings(settingsResult);
       if (settingsResult.recentProjects[0]?.exists) {
-        setProject(await inspectProject(settingsResult.recentProjects[0].path));
+        setProject(await inspectProject(settingsResult.recentProjects[0].path, settingsResult.settings.vpmTrackingPolicy));
       }
     } catch (caught) {
       setError(normalizeError(caught));
@@ -35,15 +35,13 @@ function App() {
   }, []);
 
   const gitTone = environment?.git.status === "AVAILABLE" ? "good" : "warn";
-  const lfsTone = environment?.git.lfs.status === "AVAILABLE" ? "good" : "warn";
-
   const chooseProject = async () => {
     setBusy(true);
     setError(null);
     try {
       const selected = await open({ directory: true, multiple: false, title: "Vsedi project folder を選択" });
       if (typeof selected !== "string" || !settings) return;
-      const result = await inspectProject(selected);
+      const result = await inspectProject(selected, settings.settings.vpmTrackingPolicy);
       setProject(result);
       const nextSettings = {
         ...settings.settings,
@@ -51,6 +49,22 @@ function App() {
       };
       await saveSettings(nextSettings);
       setSettings({ ...settings, settings: nextSettings, recentProjects: [{ ...nextSettings.recentProjects[0], exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path)].slice(0, 10) });
+    } catch (caught) {
+      setError(normalizeError(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateVpmTrackingPolicy = async (policy: VpmTrackingPolicy) => {
+    if (!settings || settings.settings.vpmTrackingPolicy === policy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const nextSettings = { ...settings.settings, vpmTrackingPolicy: policy };
+      await saveSettings(nextSettings);
+      setSettings({ ...settings, settings: nextSettings });
+      if (project) setProject(await inspectProject(project.path, policy));
     } catch (caught) {
       setError(normalizeError(caught));
     } finally {
@@ -108,7 +122,7 @@ function App() {
           </div>
         )}
 
-        <section className="grid gap-5 md:grid-cols-3">
+        <section className="grid gap-5 md:grid-cols-2">
           <Card>
             <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">実行環境</h2><StatusPill label={environment?.platform.supported ? "対応対象" : "確認が必要"} tone={environment?.platform.supported ? "good" : "warn"} /></div></CardHeader>
             <CardContent><p className="text-sm text-slate-600">{platformLabel}</p><p className="mt-2 text-xs text-slate-400">正式対応: Windows / Apple Silicon macOS</p></CardContent>
@@ -116,10 +130,6 @@ function App() {
           <Card>
             <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">System Git</h2><StatusPill label={environment?.git.status === "AVAILABLE" ? "利用可能" : "未検出"} tone={gitTone} /></div></CardHeader>
             <CardContent><p className="text-sm text-slate-600">{environment?.git.version ?? "Git を診断中"}</p><p className="mt-2 truncate text-xs text-slate-400">{environment?.git.executable ?? "PATH から検出します"}</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">Git LFS</h2><StatusPill label={environment?.git.lfs.status === "AVAILABLE" ? "利用可能" : "未導入"} tone={lfsTone} /></div></CardHeader>
-            <CardContent><p className="text-sm text-slate-600">{environment?.git.lfs.version ?? "検出済み Git から診断"}</p><p className="mt-2 text-xs text-slate-400">git-lfs executable は独立探索しません</p></CardContent>
           </Card>
         </section>
 
@@ -141,15 +151,27 @@ function App() {
                     <StatusPill label={projectStatusLabel(project.status)} tone={projectStatusTone(project.status)} />
                     <StatusPill label={projectKindLabel(project.projectKind)} tone={project.projectKind === "UNITY" ? "neutral" : "good"} />
                     <StatusPill
-                      label={project.repository.detected ? (project.repository.projectIsRoot ? "Git root 一致" : "Git 境界を確認") : project.repository.detected === false ? "Git 未初期化" : "Git 未確認"}
-                      tone={project.repository.projectIsRoot ? "good" : project.repository.detected ? "warn" : "neutral"}
+                      label={project.repository.detected ? (project.repository.projectIsRoot ? "Git root 一致" : "Git rootは親folder") : project.repository.detected === false ? "Git 未初期化" : "Git 未確認"}
+                      tone={project.repository.projectIsRoot ? "good" : "neutral"}
                     />
                   </div>
 
+                  {settings && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">VPM packageのGit管理</p>
+                        <p className="mt-1 text-xs text-slate-500">すべてのprojectに適用する診断方針です。</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant={settings.settings.vpmTrackingPolicy === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => void updateVpmTrackingPolicy("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button>
+                        <Button variant={settings.settings.vpmTrackingPolicy === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => void updateVpmTrackingPolicy("INCLUDE_PACKAGES")} disabled={busy}>含める</Button>
+                      </div>
+                    </div>
+                  )}
+
                   {project.isUnityProject && (
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} />
-                      <DiagnosticItem label=".gitattributes" status={project.sourceControl.gitattributes.status} summary={project.sourceControl.gitattributes.summary} />
                       <DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} />
                     </div>
                   )}
@@ -184,7 +206,7 @@ function App() {
                   )}
                 </div>
               ) : (
-                <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / VRChat / Git / LFS 設定を診断します。</div>
+                <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / VRChat / Git 設定を診断します。</div>
               )}
             </CardContent>
           </Card>

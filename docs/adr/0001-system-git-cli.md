@@ -5,7 +5,7 @@
 
 ## 背景
 
-Vsedi は Windows / macOS 上で、通常のリポジトリ操作、Git LFS、認証、ユーザー既存の Git 環境との相互運用を含む Git 操作を行う必要がある。
+Vsedi は Windows / macOS 上で、通常のリポジトリ操作、認証、ユーザー既存の Git 環境との相互運用を含む Git 操作を行う必要がある。Git LFSを利用する既存repositoryとの互換性はsystem Gitの通常動作に委ね、Vsedi固有の診断・設定はADR 0012により行わない。
 
 方式としては、Git 実装やライブラリをアプリへ組み込む方法と、システムにインストールされた Git executable を呼び出す方法が考えられる。
 
@@ -21,7 +21,7 @@ command は shell command の文字列を連結するのではなく、executabl
 
 利点:
 
-- Git LFS の通常の Git integration を利用できる
+- ユーザーのGit設定と通常のfilter integrationを尊重できる
 - ユーザー既存の Git configuration を尊重できる
 - credential helper や OS の secure store を再利用できる
 - 上級者が terminal から確認できる通常の Git 挙動に近い

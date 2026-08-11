@@ -39,13 +39,10 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 
 - system Git の存在を検出できる
 - Git version を表示できる
-- Git LFS は、検出済みの Git に対して `git lfs version` を実行し、利用可否と version を診断できる
-- Git LFS executable を Git と独立して探索しない
-- Git / Git LFS の未導入は、可能な限り例外ではなく通常の診断状態として返す
 - `.gitignore` の状態を診断できる
-- `.gitattributes` の状態を診断できる
-- VPM のソース管理ルールからの明らかな逸脱を警告できる
-- 大容量ファイル候補を検出できる
+- VPM packageをGit管理から除外するか含めるかを設定できる
+- 選択したVPM追跡方針からの明らかな逸脱を警告できる
+- Git repository rootがUnity project外にある状態を正常な構成として情報表示できる
 
 ### リポジトリ初期化
 
@@ -95,13 +92,6 @@ Core 完成後に追加する。
 - diverged history の検出と停止
 - system Git credential helper の利用
 
-### Git LFS 支援
-
-- LFS 未導入警告
-- LFS 対象候補の提案
-- `.gitattributes` 変更 preview
-- LFS push failure の検出
-
 ### 環境バックアップと復元モード
 
 ADR 0007 に従い、PC を失った場合でも制作環境を再構成しやすい仕組みを提供する。
@@ -111,7 +101,7 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 - 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
 - 初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する
 - `settings.json` は Explorer / Finder 等から通常のファイルとしてコピーできること
-- `settings.json` は整数の `schemaVersion` を必須とし、初期値は `1` とする
+- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、VPM追跡方針追加後の現行schemaは `2` とする
 - 対応する `settings.json` を所定のアプリデータ領域へ手動配置した場合、Vsedi が通常の設定ファイルとして読み込めること
 - 古い schema は可能な範囲で migration し、未対応 schema や破損 JSON を黙って上書きしないこと
 - 手動復元された設定内の旧 PC の path が存在しない場合は、クラッシュせず再選択・再登録を促すこと
@@ -129,10 +119,9 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 #### 復元モード
 
 - backup file を読み込み、形式を検証できる
-- Git / Git LFS / Unity / VCC / ALCOM 等の必要環境を診断できる
+- Git / Unity / VCC / ALCOM 等の必要環境を診断できる
 - 不足している外部ツールをユーザーへ説明できる
 - リモートリポジトリから clone できる
-- Git LFS の必要データを取得できる
 - Unity version / VPM 構成を診断できる
 - VCC / ALCOM から利用可能な状態か診断できる
 - 復元した project を Vsedi へ登録できる

@@ -5,14 +5,15 @@ import type {
   EnvironmentDiagnostic,
   ProjectDiagnostic,
   SettingsLoadResult,
+  VpmTrackingPolicy,
 } from "@/generated/bindings";
 
 export function inspectEnvironment() {
   return invoke<EnvironmentDiagnostic>("inspect_environment");
 }
 
-export function inspectProject(path: string) {
-  return invoke<ProjectDiagnostic>("inspect_project", { path });
+export function inspectProject(path: string, vpmTrackingPolicy: VpmTrackingPolicy) {
+  return invoke<ProjectDiagnostic>("inspect_project", { path, vpmTrackingPolicy });
 }
 
 export function loadSettings() {

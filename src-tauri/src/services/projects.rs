@@ -2,9 +2,9 @@ use crate::{
     errors::{AppError, AppResult, ErrorCode},
     git::diagnostics as git_diagnostics,
     models::{
-        ConfigFileDiagnostic, DiagnosticSeverity, FileDiagnosticStatus, LargeFileDiagnostic,
-        ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RepositoryDiagnostic,
-        SourceControlDiagnostic, VpmDiagnostic, VpmPackage,
+        ConfigFileDiagnostic, DiagnosticSeverity, FileDiagnosticStatus, ProjectDiagnostic,
+        ProjectIssue, ProjectKind, ProjectStatus, RepositoryDiagnostic, SourceControlDiagnostic,
+        VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
     },
     platform::process::find_executable,
 };
@@ -15,11 +15,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
-const MAX_SCANNED_FILES: usize = 100_000;
-const MAX_LARGE_FILE_RESULTS: usize = 100;
-
-pub fn inspect_project(path: &str) -> AppResult<ProjectDiagnostic> {
+pub fn inspect_project(
+    path: &str,
+    vpm_tracking_policy: VpmTrackingPolicy,
+) -> AppResult<ProjectDiagnostic> {
     let requested = Path::new(path);
     validate_requested_path(requested)?;
 
@@ -100,7 +99,8 @@ pub fn inspect_project(path: &str) -> AppResult<ProjectDiagnostic> {
     let vpm = inspect_vpm(&root, &mut issues);
     let project_kind = classify_project(&vpm.packages, &mut issues);
     let repository = inspect_repository(&root, &mut issues);
-    let source_control = inspect_source_control(&root, &vpm, &repository, &mut issues);
+    let source_control =
+        inspect_source_control(&root, &vpm, &repository, vpm_tracking_policy, &mut issues);
     let is_git_repository = repository.detected;
     let status = if issues.iter().any(|item| {
         matches!(
@@ -327,8 +327,8 @@ fn inspect_repository(root: &Path, issues: &mut Vec<ProjectIssue>) -> Repository
     if !project_is_root {
         issues.push(issue(
             "GIT_ROOT_OUTSIDE_PROJECT",
-            DiagnosticSeverity::Warning,
-            "選択した Unity project と Git repository root が一致しません。親 repository や nested boundary を確認してください。",
+            DiagnosticSeverity::Info,
+            "Git repository root は Unity project の外側です。関連ファイルを同じrepositoryで管理する構成として扱います。",
             Some(repository_root.clone()),
         ));
     }
@@ -343,37 +343,15 @@ fn inspect_source_control(
     root: &Path,
     vpm: &VpmDiagnostic,
     repository: &RepositoryDiagnostic,
+    vpm_tracking_policy: VpmTrackingPolicy,
     issues: &mut Vec<ProjectIssue>,
 ) -> SourceControlDiagnostic {
     let gitignore = inspect_gitignore(root, issues);
-    let gitattributes = inspect_gitattributes(root, issues);
-    let vpm_packages = inspect_vpm_source_control(root, vpm, repository, issues);
-    let (large_files, scan_truncated) = scan_large_files(root);
-    for file in &large_files {
-        issues.push(issue(
-            "LARGE_FILE_CANDIDATE",
-            DiagnosticSeverity::Warning,
-            format!(
-                "50 MiB 以上のファイルがあります（{} MiB）。Git LFS の対象か確認してください。",
-                file.size_bytes / 1024 / 1024
-            ),
-            Some(file.path.clone()),
-        ));
-    }
-    if scan_truncated {
-        issues.push(issue(
-            "LARGE_FILE_SCAN_TRUNCATED",
-            DiagnosticSeverity::Warning,
-            "ファイル数が多いため、大容量ファイル診断を途中で終了しました。",
-            None,
-        ));
-    }
+    let vpm_packages =
+        inspect_vpm_source_control(root, vpm, repository, vpm_tracking_policy, issues);
     SourceControlDiagnostic {
         gitignore,
-        gitattributes,
         vpm_packages,
-        large_files,
-        scan_truncated,
     }
 }
 
@@ -434,61 +412,11 @@ fn inspect_gitignore(root: &Path, issues: &mut Vec<ProjectIssue>) -> ConfigFileD
     }
 }
 
-fn inspect_gitattributes(root: &Path, issues: &mut Vec<ProjectIssue>) -> ConfigFileDiagnostic {
-    let relative = ".gitattributes".to_owned();
-    let path = root.join(&relative);
-    if !path.is_file() {
-        issues.push(issue(
-            "GITATTRIBUTES_MISSING",
-            DiagnosticSeverity::Warning,
-            ".gitattributes がありません。大容量 binary asset の Git LFS rule を確認できません。",
-            Some(relative.clone()),
-        ));
-        return config(
-            relative,
-            FileDiagnosticStatus::Missing,
-            "ファイルがありません",
-        );
-    }
-    let Ok(text) = fs::read_to_string(&path) else {
-        issues.push(issue(
-            "GITATTRIBUTES_UNREADABLE",
-            DiagnosticSeverity::Error,
-            ".gitattributes を読み取れません。",
-            Some(relative.clone()),
-        ));
-        return config(
-            relative,
-            FileDiagnosticStatus::NeedsAttention,
-            "読み取れません",
-        );
-    };
-    let has_lfs = meaningful_lines(&text).any(|line| line.contains("filter=lfs"));
-    if has_lfs {
-        config(
-            relative,
-            FileDiagnosticStatus::Healthy,
-            "Git LFS rule があります",
-        )
-    } else {
-        issues.push(issue(
-            "GITATTRIBUTES_LFS_RULES_MISSING",
-            DiagnosticSeverity::Warning,
-            "Git LFS rule がありません。Unity の大容量 binary asset に必要か確認してください。",
-            Some(relative.clone()),
-        ));
-        config(
-            relative,
-            FileDiagnosticStatus::NeedsAttention,
-            "Git LFS rule がありません",
-        )
-    }
-}
-
 fn inspect_vpm_source_control(
     root: &Path,
     vpm: &VpmDiagnostic,
     repository: &RepositoryDiagnostic,
+    policy: VpmTrackingPolicy,
     issues: &mut Vec<ProjectIssue>,
 ) -> ConfigFileDiagnostic {
     let relative = "Packages/.gitignore".to_owned();
@@ -500,33 +428,30 @@ fn inspect_vpm_source_control(
         );
     }
     let path = root.join(&relative);
-    if !path.is_file() {
-        issues.push(issue(
-            "VPM_GITIGNORE_MISSING",
-            DiagnosticSeverity::Warning,
-            "Packages/.gitignore がありません。VRChat package 本体を除外できているか確認してください。",
-            Some(relative.clone()),
-        ));
-        return config(
-            relative,
-            FileDiagnosticStatus::Missing,
-            "VPM package 除外ルールがありません",
-        );
-    }
-    let Ok(text) = fs::read_to_string(&path) else {
-        issues.push(issue(
-            "VPM_GITIGNORE_UNREADABLE",
-            DiagnosticSeverity::Error,
-            "Packages/.gitignore を読み取れません。",
-            Some(relative.clone()),
-        ));
-        return config(
-            relative,
-            FileDiagnosticStatus::NeedsAttention,
-            "読み取れません",
-        );
+    let text = if path.is_file() {
+        match fs::read_to_string(&path) {
+            Ok(text) => Some(text),
+            Err(_) => {
+                issues.push(issue(
+                    "VPM_GITIGNORE_UNREADABLE",
+                    DiagnosticSeverity::Error,
+                    "Packages/.gitignore を読み取れません。",
+                    Some(relative.clone()),
+                ));
+                return config(
+                    relative,
+                    FileDiagnosticStatus::NeedsAttention,
+                    "読み取れません",
+                );
+            }
+        }
+    } else {
+        None
     };
-    let lines = meaningful_lines(&text).collect::<Vec<_>>();
+    let lines = text
+        .as_deref()
+        .map(|text| meaningful_lines(text).collect::<Vec<_>>())
+        .unwrap_or_default();
     let excludes_vrchat = lines
         .iter()
         .any(|line| !line.starts_with('!') && line.contains("com.vrchat.") && line.contains('*'));
@@ -534,120 +459,102 @@ fn inspect_vpm_source_control(
         line.starts_with('!')
             && (line.contains("com.vrchat.core.") || line.contains("com.vrchat.core.vpm-resolver"))
     });
-    let mut healthy = excludes_vrchat && includes_resolver;
-    if !healthy {
-        issues.push(issue(
-            "VPM_SOURCE_CONTROL_RULES_INCOMPLETE",
-            DiagnosticSeverity::Warning,
-            "VRChat package の除外、または VPM Resolver の例外ルールが不足しています。",
-            Some(relative.clone()),
-        ));
-    }
+    let tracked_vrchat_package = (repository.detected == Some(true))
+        .then(|| find_executable("git"))
+        .flatten()
+        .and_then(|git| git_diagnostics::tracked_package_files(&git, root))
+        .is_some_and(|files| {
+            files.iter().any(|path| {
+                let normalized = path.replace('\\', "/");
+                normalized.starts_with("Packages/com.vrchat.")
+                    && !normalized.starts_with("Packages/com.vrchat.core.vpm-resolver/")
+            })
+        });
 
-    if repository.project_is_root == Some(true) {
-        if let Some(git) = find_executable("git") {
-            if let Some(files) = git_diagnostics::tracked_package_files(&git, root) {
-                let tracked_vrchat_package = files.iter().any(|path| {
-                    let normalized = path.replace('\\', "/");
-                    normalized.starts_with("Packages/com.vrchat.")
-                        && !normalized.starts_with("Packages/com.vrchat.core.vpm-resolver/")
-                });
-                if tracked_vrchat_package {
-                    healthy = false;
-                    issues.push(issue(
-                        "VPM_PACKAGE_TRACKED",
-                        DiagnosticSeverity::Error,
-                        "VPM package 本体が Git の追跡対象です。Resolver 以外の VRChat package は通常除外します。",
-                        Some("Packages".to_owned()),
-                    ));
-                }
+    match policy {
+        VpmTrackingPolicy::ExcludePackages => {
+            let mut healthy = excludes_vrchat && includes_resolver;
+            if text.is_none() {
+                healthy = false;
+                issues.push(issue(
+                    "VPM_GITIGNORE_MISSING",
+                    DiagnosticSeverity::Warning,
+                    "設定ではVPM packageを除外しますが、Packages/.gitignore がありません。",
+                    Some(relative.clone()),
+                ));
+            } else if !healthy {
+                issues.push(issue(
+                    "VPM_SOURCE_CONTROL_RULES_INCOMPLETE",
+                    DiagnosticSeverity::Warning,
+                    "VRChat package の除外、または VPM Resolver の例外ルールが不足しています。",
+                    Some(relative.clone()),
+                ));
+            }
+            if tracked_vrchat_package {
+                healthy = false;
+                issues.push(issue(
+                    "VPM_PACKAGE_TRACKED",
+                    DiagnosticSeverity::Warning,
+                    "設定ではVPM packageを除外しますが、package本体がGitの追跡対象です。",
+                    Some("Packages".to_owned()),
+                ));
+            }
+            if healthy {
+                config(
+                    relative,
+                    FileDiagnosticStatus::Healthy,
+                    "設定どおりVPM packageを除外しています",
+                )
+            } else {
+                config(
+                    relative,
+                    FileDiagnosticStatus::NeedsAttention,
+                    "VPM package除外設定とprojectの状態が一致しません",
+                )
+            }
+        }
+        VpmTrackingPolicy::IncludePackages => {
+            let mut healthy = !excludes_vrchat;
+            if excludes_vrchat {
+                issues.push(issue(
+                    "VPM_PACKAGE_IGNORED",
+                    DiagnosticSeverity::Warning,
+                    "設定ではVPM packageをGit管理に含めますが、Packages/.gitignore で除外されています。",
+                    Some(relative.clone()),
+                ));
+            }
+            let installed_package_exists = vpm.packages.iter().any(|package| {
+                package.name.starts_with("com.vrchat.")
+                    && package.name != "com.vrchat.core.vpm-resolver"
+                    && root.join("Packages").join(&package.name).is_dir()
+            });
+            if repository.detected == Some(true)
+                && installed_package_exists
+                && !tracked_vrchat_package
+            {
+                healthy = false;
+                issues.push(issue(
+                    "VPM_PACKAGE_NOT_TRACKED",
+                    DiagnosticSeverity::Warning,
+                    "設定ではVPM packageをGit管理に含めますが、package本体がまだ追跡されていません。",
+                    Some("Packages".to_owned()),
+                ));
+            }
+            if healthy {
+                config(
+                    relative,
+                    FileDiagnosticStatus::Healthy,
+                    "設定どおりVPM packageをGit管理に含められます",
+                )
+            } else {
+                config(
+                    relative,
+                    FileDiagnosticStatus::NeedsAttention,
+                    "VPM packageを含める設定とprojectの状態が一致しません",
+                )
             }
         }
     }
-
-    if healthy {
-        config(
-            relative,
-            FileDiagnosticStatus::Healthy,
-            "VRChat package を除外し Resolver を保持します",
-        )
-    } else {
-        config(
-            relative,
-            FileDiagnosticStatus::NeedsAttention,
-            "VPM source-control rule を確認してください",
-        )
-    }
-}
-
-fn scan_large_files(root: &Path) -> (Vec<LargeFileDiagnostic>, bool) {
-    let mut results = Vec::new();
-    let mut stack = ["Assets", "Packages", "ProjectSettings"]
-        .into_iter()
-        .map(|name| root.join(name))
-        .filter(|path| path.is_dir())
-        .collect::<Vec<_>>();
-    let mut scanned = 0usize;
-    let mut truncated = false;
-
-    while let Some(directory) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            if scanned >= MAX_SCANNED_FILES || results.len() >= MAX_LARGE_FILE_RESULTS {
-                truncated = true;
-                break;
-            }
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
-            if file_type.is_symlink() {
-                continue;
-            }
-            let path = entry.path();
-            if file_type.is_dir() {
-                if !skip_scan_directory(&path) {
-                    stack.push(path);
-                }
-                continue;
-            }
-            if !file_type.is_file() {
-                continue;
-            }
-            scanned += 1;
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-            if metadata.len() >= LARGE_FILE_THRESHOLD_BYTES {
-                results.push(LargeFileDiagnostic {
-                    path: relative_or_absolute(root, &path),
-                    size_bytes: metadata.len(),
-                });
-            }
-        }
-        if truncated {
-            break;
-        }
-    }
-    results.sort_by_key(|item| std::cmp::Reverse(item.size_bytes));
-    (results, truncated)
-}
-
-fn skip_scan_directory(path: &Path) -> bool {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    matches!(name.as_str(), ".git" | "library" | "temp" | "obj" | "logs")
-        || (path
-            .parent()
-            .and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some("Packages")
-            && name.starts_with("com.vrchat.")
-            && name != "com.vrchat.core.vpm-resolver")
 }
 
 fn has_ignore_rule(text: &str, directory: &str) -> bool {
@@ -674,18 +581,11 @@ fn not_applicable_source_control() -> SourceControlDiagnostic {
             FileDiagnosticStatus::NotApplicable,
             "Unity project ではありません",
         ),
-        gitattributes: config(
-            ".gitattributes".to_owned(),
-            FileDiagnosticStatus::NotApplicable,
-            "Unity project ではありません",
-        ),
         vpm_packages: config(
             "Packages/.gitignore".to_owned(),
             FileDiagnosticStatus::NotApplicable,
             "Unity project ではありません",
         ),
-        large_files: Vec::new(),
-        scan_truncated: false,
     }
 }
 
@@ -724,11 +624,15 @@ fn relative_or_absolute(root: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{inspect_project, LARGE_FILE_THRESHOLD_BYTES};
-    use crate::models::{FileDiagnosticStatus, ProjectKind, ProjectStatus};
+    use super::inspect_project;
+    use crate::models::{
+        DiagnosticSeverity, FileDiagnosticStatus, ProjectDiagnostic, ProjectKind, ProjectStatus,
+        VpmTrackingPolicy,
+    };
     use std::{
         fs,
         path::{Path, PathBuf},
+        process::Command,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -766,11 +670,6 @@ mod tests {
             )
             .expect("manifest");
             fs::write(self.0.join(".gitignore"), "[Ll]ibrary/\n[Tt]emp/\n").expect("gitignore");
-            fs::write(
-                self.0.join(".gitattributes"),
-                "*.psd filter=lfs diff=lfs merge=lfs -text\n",
-            )
-            .expect("gitattributes");
         }
     }
 
@@ -780,10 +679,14 @@ mod tests {
         }
     }
 
+    fn diagnose(fixture: &Fixture, policy: VpmTrackingPolicy) -> ProjectDiagnostic {
+        inspect_project(fixture.path().to_str().expect("path"), policy).expect("diagnostic")
+    }
+
     #[test]
     fn identifies_non_unity_folder() {
         let fixture = Fixture::new("not-unity");
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.status, ProjectStatus::NotUnity);
         assert!(!result.is_unity_project);
         assert!(result
@@ -807,7 +710,7 @@ mod tests {
         )
         .expect("package gitignore");
 
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.status, ProjectStatus::Manageable);
         assert_eq!(result.project_kind, ProjectKind::VrchatAvatar);
         assert_eq!(result.unity_revision.as_deref(), Some("abcd1234"));
@@ -822,16 +725,11 @@ mod tests {
         let fixture = Fixture::new("missing-rules");
         fixture.unity("{}");
         fs::remove_file(fixture.path().join(".gitignore")).expect("remove gitignore");
-        fs::remove_file(fixture.path().join(".gitattributes")).expect("remove gitattributes");
 
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.status, ProjectStatus::NeedsAttention);
         assert_eq!(
             result.source_control.gitignore.status,
-            FileDiagnosticStatus::Missing
-        );
-        assert_eq!(
-            result.source_control.gitattributes.status,
             FileDiagnosticStatus::Missing
         );
     }
@@ -841,8 +739,52 @@ mod tests {
         let fixture = Fixture::new("world");
         fixture.unity(r#"{"com.vrchat.worlds":"3.10.4","com.vrchat.base":"3.10.4"}"#);
 
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.project_kind, ProjectKind::VrchatWorld);
+    }
+
+    #[test]
+    fn parent_repository_is_informational() {
+        let fixture = Fixture::new("parent-repository");
+        if !Command::new("git")
+            .arg("--version")
+            .status()
+            .is_ok_and(|status| status.success())
+        {
+            return;
+        }
+        assert!(Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(fixture.path())
+            .status()
+            .expect("git init")
+            .success());
+
+        let project = fixture.path().join("UnityProject");
+        fs::create_dir_all(project.join("Assets")).expect("Assets");
+        fs::create_dir_all(project.join("ProjectSettings")).expect("ProjectSettings");
+        fs::create_dir_all(project.join("Packages")).expect("Packages");
+        fs::write(
+            project.join("ProjectSettings/ProjectVersion.txt"),
+            "m_EditorVersion: 2022.3.22f1\n",
+        )
+        .expect("ProjectVersion");
+        fs::write(
+            project.join("Packages/manifest.json"),
+            r#"{"dependencies":{}}"#,
+        )
+        .expect("manifest");
+        fs::write(project.join(".gitignore"), "[Ll]ibrary/\n[Tt]emp/\n").expect("gitignore");
+
+        let result = inspect_project(
+            project.to_str().expect("path"),
+            VpmTrackingPolicy::ExcludePackages,
+        )
+        .expect("diagnostic");
+        assert_eq!(result.status, ProjectStatus::Manageable);
+        assert!(result.issues.iter().any(|issue| {
+            issue.code == "GIT_ROOT_OUTSIDE_PROJECT" && issue.severity == DiagnosticSeverity::Info
+        }));
     }
 
     #[test]
@@ -855,7 +797,7 @@ mod tests {
         )
         .expect("vpm manifest");
 
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
+        let result = diagnose(&fixture, VpmTrackingPolicy::ExcludePackages);
         assert_eq!(result.status, ProjectStatus::NeedsAttention);
         assert!(result
             .issues
@@ -864,19 +806,41 @@ mod tests {
     }
 
     #[test]
-    fn reports_large_file_candidates() {
-        let fixture = Fixture::new("large-file");
-        fixture.unity("{}");
-        let large = fixture.path().join("Assets/large.psd");
-        let file = fs::File::create(&large).expect("large file");
-        file.set_len(LARGE_FILE_THRESHOLD_BYTES)
-            .expect("sparse file");
+    fn include_policy_accepts_vpm_packages_without_exclusion_rule() {
+        let fixture = Fixture::new("include-vpm");
+        fixture.unity(r#"{"com.vrchat.avatars":"3.10.4"}"#);
+        fs::write(
+            fixture.path().join("Packages/vpm-manifest.json"),
+            r#"{"dependencies":{"com.vrchat.avatars":{"version":"3.10.4"}}}"#,
+        )
+        .expect("vpm manifest");
 
-        let result = inspect_project(fixture.path().to_str().expect("path")).expect("diagnostic");
-        assert_eq!(result.source_control.large_files.len(), 1);
+        let result = diagnose(&fixture, VpmTrackingPolicy::IncludePackages);
         assert_eq!(
-            result.source_control.large_files[0].path,
-            "Assets/large.psd"
+            result.source_control.vpm_packages.status,
+            FileDiagnosticStatus::Healthy
         );
+    }
+
+    #[test]
+    fn include_policy_warns_when_vpm_packages_are_ignored() {
+        let fixture = Fixture::new("include-vpm-ignored");
+        fixture.unity(r#"{"com.vrchat.avatars":"3.10.4"}"#);
+        fs::write(
+            fixture.path().join("Packages/vpm-manifest.json"),
+            r#"{"dependencies":{"com.vrchat.avatars":{"version":"3.10.4"}}}"#,
+        )
+        .expect("vpm manifest");
+        fs::write(
+            fixture.path().join("Packages/.gitignore"),
+            "com.vrchat.*\n!com.vrchat.core.*\n",
+        )
+        .expect("package gitignore");
+
+        let result = diagnose(&fixture, VpmTrackingPolicy::IncludePackages);
+        assert!(result
+            .issues
+            .iter()
+            .any(|issue| issue.code == "VPM_PACKAGE_IGNORED"));
     }
 }

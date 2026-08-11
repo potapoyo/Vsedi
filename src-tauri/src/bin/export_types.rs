@@ -4,10 +4,10 @@ use vsedi_lib::{
     errors::{AppError, ErrorCode},
     models::{
         AppSettings, ConfigFileDiagnostic, DiagnosticSeverity, DiagnosticStatus,
-        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, GitLfsDiagnostic,
-        LargeFileDiagnostic, PlatformDiagnostic, ProjectDiagnostic, ProjectIssue, ProjectKind,
-        ProjectStatus, RecentProject, RecentProjectStatus, RepositoryDiagnostic,
-        SettingsLoadResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage,
+        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, PlatformDiagnostic,
+        ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RecentProject,
+        RecentProjectStatus, RepositoryDiagnostic, SettingsLoadResult, SourceControlDiagnostic,
+        VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
     },
 };
 
@@ -17,7 +17,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ErrorCode::export_to_string(&config)?,
         AppError::export_to_string(&config)?,
         DiagnosticStatus::export_to_string(&config)?,
-        GitLfsDiagnostic::export_to_string(&config)?,
         GitDiagnostic::export_to_string(&config)?,
         PlatformDiagnostic::export_to_string(&config)?,
         EnvironmentDiagnostic::export_to_string(&config)?,
@@ -30,11 +29,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         VpmPackage::export_to_string(&config)?,
         VpmDiagnostic::export_to_string(&config)?,
         RepositoryDiagnostic::export_to_string(&config)?,
-        LargeFileDiagnostic::export_to_string(&config)?,
         SourceControlDiagnostic::export_to_string(&config)?,
         ProjectDiagnostic::export_to_string(&config)?,
         RecentProject::export_to_string(&config)?,
         RecentProjectStatus::export_to_string(&config)?,
+        VpmTrackingPolicy::export_to_string(&config)?,
         AppSettings::export_to_string(&config)?,
         SettingsLoadResult::export_to_string(&config)?,
     ]

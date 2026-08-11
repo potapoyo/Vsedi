@@ -57,7 +57,7 @@ M2 以降で必要になった時点で `unity/`、`vrchat/` 等を追加する�
 
 - `commands/`: Tauri command の薄い境界。入力検証と application service 呼び出しを中心とし、Git / filesystem の実処理を書かない
 - `services/`: Vsedi 上のユースケースを組み立てる
-- `git/`: system Git CLI の安全な実行、出力 parsing、Git / Git LFS 診断
+- `git/`: system Git CLI の安全な実行、出力 parsing、Git診断
 - `platform/`: OS 固有 path / process 等の処理を隔離する
 - `models/`: Frontend と共有する DTO や domain 上の構造化データ
 - `errors/`: ADR 0009 の `AppError` / `ErrorCode`

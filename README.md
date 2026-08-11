@@ -22,7 +22,7 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の M1 基盤を実装中です。Rust 側の command boundary、Git / Git LFS 環境診断、設定保全、構造化ログ、生成型、最小 UI を含みます。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md) を参照してください。
+Tauri v2 / React の基盤とM2のproject診断を実装中です。Rust 側の command boundary、Git環境診断、Unity / VRChat / VPM診断、設定保全、構造化ログ、生成型、最小 UI を含みます。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md) を参照してください。
 
 ## ドキュメント
 
@@ -93,7 +93,7 @@ pnpm tauri dev
 
 1. 「Vsedi」というネイティブウィンドウが開くことを確認する。
 2. 「実行環境」が対応対象になり、Windows の OS / architecture が表示されることを確認する。
-3. 「System Git」に Git のバージョンが表示されることを確認する。「Git LFS」が未導入でも、その表示自体は失敗ではない。
+3. 「System Git」に Git のバージョンが表示されることを確認する。
 4. 「再診断」を押し、赤いエラー表示が出ないことを確認する。
 5. 「フォルダを選択」から Unity project のルートを選び、Unity project と Unity バージョンが表示されることを確認する。
 6. 終了するときは、ターミナルで `Ctrl+C` を押す。
@@ -139,12 +139,13 @@ pnpm tauri dev
 1. Vsedi のリポジトリで `pnpm tauri dev` を実行する。
 2. 「Vsedi」というウィンドウが開くことを確認する。
 3. 画面上部の「実行環境」が「対応対象」になり、Apple Silicon Mac では `macOS / arm64` と表示されることを確認する。
-4. 「System Git」が「利用可能」になり、Git のバージョンが表示されることを確認する。「Git LFS」は未導入なら「未導入」と表示されるが、この表示自体は失敗ではない。
+4. 「System Git」が「利用可能」になり、Git のバージョンが表示されることを確認する。
 5. 「再診断」を押し、赤いエラー表示が出ないことを確認する。
 6. 「フォルダを選択」を押して Unity project のルートフォルダを選ぶ。`Assets` と `ProjectSettings/ProjectVersion.txt` があるフォルダなら、Unity version と診断状態が表示される。
 7. VRChat project では Avatar / World 種別と検出 package が表示されることを確認する。
-8. `.gitignore`、`.gitattributes`、VPM package rule、Git repository root、大容量ファイル候補の診断理由が表示されることを確認する。
-9. 終了するときは、ターミナルで `Ctrl-C` を押す。
+8. `.gitignore`、VPM package rule、Git repository rootの診断理由が表示されることを確認する。
+9. 「VPM packageのGit管理」を「除外する」「含める」で切り替え、選択した方針に応じて診断が更新されることを確認する。
+10. 終了するときは、ターミナルで `Ctrl-C` を押す。
 
 Unity project が手元にない場合は、手順 1〜5 までを実施すれば、ネイティブGUIと環境診断の確認ができます。
 

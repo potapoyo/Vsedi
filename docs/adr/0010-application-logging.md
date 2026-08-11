@@ -77,7 +77,7 @@ remote URL を記録する必要がある場合は credential 部分を除去・
 - 直近の関連ログ
 - Vsedi version
 - OS / architecture
-- Git / Git LFS の診断結果
+- Git の診断結果
 - 安全に共有可能なエラー情報
 
 `settings.json` 本体や credential / secret は診断ログへ含めない。

@@ -1,7 +1,15 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum VpmTrackingPolicy {
+    #[default]
+    ExcludePackages,
+    IncludePackages,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +36,8 @@ pub struct AppSettings {
     pub recent_projects: Vec<RecentProject>,
     #[serde(default = "default_log_level")]
     pub log_level: String,
+    #[serde(default)]
+    pub vpm_tracking_policy: VpmTrackingPolicy,
 }
 
 fn default_log_level() -> String {
@@ -41,6 +51,7 @@ impl Default for AppSettings {
             onboarding_completed: false,
             recent_projects: Vec::new(),
             log_level: default_log_level(),
+            vpm_tracking_policy: VpmTrackingPolicy::default(),
         }
     }
 }

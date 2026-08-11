@@ -11,19 +11,10 @@ pub enum DiagnosticStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct GitLfsDiagnostic {
-    pub status: DiagnosticStatus,
-    pub version: Option<String>,
-    pub detail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct GitDiagnostic {
     pub status: DiagnosticStatus,
     pub executable: Option<String>,
     pub version: Option<String>,
-    pub lfs: GitLfsDiagnostic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
@@ -118,20 +109,9 @@ pub struct RepositoryDiagnostic {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct LargeFileDiagnostic {
-    pub path: String,
-    #[ts(type = "number")]
-    pub size_bytes: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct SourceControlDiagnostic {
     pub gitignore: ConfigFileDiagnostic,
-    pub gitattributes: ConfigFileDiagnostic,
     pub vpm_packages: ConfigFileDiagnostic,
-    pub large_files: Vec<LargeFileDiagnostic>,
-    pub scan_truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]

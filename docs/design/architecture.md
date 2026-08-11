@@ -98,8 +98,8 @@ M1 で実装する command contract は次のとおりである。
 
 | Command | 入力 | 戻り値 | 用途 |
 | --- | --- | --- | --- |
-| `inspect_environment` | なし | `EnvironmentDiagnostic` | OS / architecture / Git / Git LFS 診断 |
-| `inspect_project` | `path: string` | `ProjectDiagnostic` | Unity project と repository の診断 |
+| `inspect_environment` | なし | `EnvironmentDiagnostic` | OS / architecture / Git 診断 |
+| `inspect_project` | `path: string`, `vpmTrackingPolicy` | `ProjectDiagnostic` | Unity project と repository の診断 |
 | `load_settings` | なし | `SettingsLoadResult` | 設定読込と stale path の状態表示 |
 | `save_settings` | `AppSettings` | `void` | 許可された内部設定の保存 |
 | `export_diagnostic_log` | `destination: string` | `void` | redaction 済み診断ログの書出し |
@@ -115,9 +115,7 @@ Frontend に `run_shell` / `run_git` のような汎用 command は公開しな�
 
 ### DiagnosticsService
 
-Git、Unity、VRChat/VPM、LFS、ignore 設定、大容量ファイルの診断結果を統合し、ユーザー向けの診断情報へ変換する。
-
-Git LFS は独立した executable を探索せず、Vsedi が利用する Git に対して `git lfs version` を実行して利用可否と version を診断する。これにより、実際の Git 実行環境から見える LFS 状態を診断結果の正本とする。
+Git、Unity、VRChat/VPM、ignore設定の診断結果を統合し、ユーザー向けの診断情報へ変換する。
 
 M2 の `inspect_project` は読み取り専用で、次の情報を1つの `ProjectDiagnostic` に統合する。
 
@@ -126,12 +124,12 @@ M2 の `inspect_project` は読み取り専用で、次の情報を1つの `Proj
 - `Packages/manifest.json` と `Packages/vpm-manifest.json` の package metadata
 - `com.vrchat.avatars` / `com.vrchat.worlds` に基づく Avatar / World 判定
 - Git repository root と選択 project root の境界一致
-- root `.gitignore`、`.gitattributes`、VPM用 `Packages/.gitignore` の状態
-- 50 MiB 以上の大容量ファイル候補
-
-大容量ファイル走査は `Assets`、`Packages`、`ProjectSettings` に限定し、symlink と Unity の生成物 directory を辿らない。VPM package 本体も Resolver を除いて走査対象外とする。走査件数と結果件数には上限を設け、上限到達は正常扱いせず診断警告として返す。
+- root `.gitignore` とVPM用 `Packages/.gitignore` の状態
+- 設定で選択したVPM package追跡方針との一致
 
 Avatar / World 判定は package ID を根拠にする。両方が存在する場合や VRChat package はあるが種別 package がない場合は推測で正常扱いせず、要確認とする。
+
+Git repository rootがUnity project外にある構成は関連ファイルを同じrepositoryで管理できる正常な構成として、`INFO`の診断理由を返す。
 
 ### SaveService
 
@@ -167,7 +165,6 @@ Vsedi Core 完成後に追加する。fetch / push / fast-forward 同期と履�
 - exit code、stdout、stderr を分離して取得する
 - parser は fixture を用いたテストを行う
 - secret をログへコピーしない
-- Git LFS の診断は検出済み Git に `lfs version` を引数として渡して行い、`git-lfs` を別 executable として探索しない
 
 実装時には、適切な場所で NUL 区切りの status format など、安定した機械可読出力を持つ Git の plumbing / porcelain format を選択する。
 
@@ -243,7 +240,7 @@ ADR 0009 に従い、Rust 側に共通の `AppError` と安定した `ErrorCode`
 
 Git stderr / OS error は Rust 側で可能な範囲で安定コードへ変換し、生の詳細は必要な場合だけ sanitized な `technicalDetail` / log に保持する。
 
-Git LFS 未導入など、ユーザーが次の行動を取れる「正常な未検出」はエラーではなく診断結果として返す。実行そのものが予期せず失敗した場合だけ `ENV_GIT_LFS_VERSION_FAILED` 等のエラーにする。
+Git未導入など、ユーザーが次の行動を取れる「正常な未検出」はエラーではなく診断結果として返す。実行そのものが予期せず失敗した場合だけ構造化エラーにする。
 
 `AppError` / `ErrorCode` は ADR 0008 の方針に従い `serde + ts-rs` から TypeScript 型を生成する。
 

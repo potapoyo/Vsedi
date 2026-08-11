@@ -43,8 +43,6 @@ Git の一般論だけではなく Unity / VRChat / VPM の構造を理解する
 - `.meta` ファイル
 - VPM manifest / Resolver
 - VPM パッケージのソース管理除外状態
-- Git LFS
-- 大容量バイナリ
 
 VRChat 公式の VPM ソース管理ガイドを基本ルールとして扱う。
 
