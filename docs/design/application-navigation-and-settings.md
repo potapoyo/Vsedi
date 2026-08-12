@@ -1,6 +1,6 @@
 # アプリ画面構成と設定スコープ設計
 
-Status: Draft
+Status: Phase 2 In Progress
 Date: 2026-08-12
 
 ## 目的
@@ -223,7 +223,7 @@ AppSettings
    └─ vpmTrackingPolicyOverride?   # null / EXCLUDE / INCLUDE
 ```
 
-`repositorySettings` は app data の `settings.json` に保存し、設定画面を開いたり override を変更しただけで repository を dirty にしない。`.git/config` や repository 内の独自 file へ暗黙に書き込まない。
+`repositorySettings` は app data の `settings.json` に保存し、設定画面を開いたり override を変更しただけで repository を dirty にしない。`.git/config` や repository 内の独自 file へ暗黙に書き込まない。実効VPM方針は、repository rootが一致するoverride、全体既定値、安全なschema既定値の順で解決し、診断・初期化preview・初期化実行で同じ解決結果を使う。
 
 repository root は保存前に Rust 側で canonicalize し、比較規則は OS ごとに統一する。存在しなくなった path の設定は黙って削除せず、登録済み project と同様に stale 状態として扱う。repository が移動された場合は、ユーザーが再選択した時点で旧 path から設定を引き継ぐか確認できる設計を後続で追加する。
 
@@ -296,10 +296,11 @@ page は配置とデータ取得の調停を担当し、保存、履歴、設定
 
 ### Phase 2 — リポジトリ設定
 
-- `repositorySettings` と schema migration を追加
-- VPM tracking policy の全体既定値と repository override を実装
-- 診断、初期化 preview、保存前検証が同じ実効設定を使うよう Rust 側で解決
-- リポジトリ設定に ignore 診断と preview 導線を移動
+- `repositorySettings` と schema migrationを追加済み
+- VPM tracking policyの全体既定値とrepository overrideを実装済み
+- 診断、初期化preview、初期化実行が同じ実効設定をRust側で解決
+- リポジトリ設定画面に実効値・設定由来・override操作を追加
+- リポジトリ設定にignore診断とpreview導線を残し、次のPhaseで差分編集を追加
 
 ### Phase 3 — 操作品質
 

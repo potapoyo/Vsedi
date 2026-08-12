@@ -14,7 +14,6 @@ import type {
   SettingsLoadResult,
   SaveRequest,
   SaveResult,
-  VpmTrackingPolicy,
   WorktreeSnapshot,
 } from "@/generated/bindings";
 
@@ -22,8 +21,8 @@ export function inspectEnvironment() {
   return invoke<EnvironmentDiagnostic>("inspect_environment");
 }
 
-export function inspectProject(path: string, vpmTrackingPolicy: VpmTrackingPolicy) {
-  return invoke<ProjectDiagnostic>("inspect_project", { path, vpmTrackingPolicy });
+export function inspectProject(path: string) {
+  return invoke<ProjectDiagnostic>("inspect_project", { path });
 }
 
 export function readRepositoryState(projectPath: string) {

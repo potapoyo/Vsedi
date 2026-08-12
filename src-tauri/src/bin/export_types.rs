@@ -9,9 +9,9 @@ use vsedi_lib::{
         IgnoreTemplateSettings, InitializeRepositoryRequest, LogSnapshot, PlatformDiagnostic,
         ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RecentProject,
         RecentProjectStatus, RepositoryBlockingReason, RepositoryDiagnostic,
-        RepositoryInitializationPreview, RepositoryState, SaveRequest, SaveResult,
-        SettingsLoadResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
-        WorktreeSnapshot,
+        RepositoryInitializationPreview, RepositorySettings, RepositoryState, SaveRequest,
+        SaveResult, SettingsLoadResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage,
+        VpmTrackingPolicy, WorktreeSnapshot,
     },
 };
 
@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FileDiff::export_to_string(&config)?,
         RecentProject::export_to_string(&config)?,
         RecentProjectStatus::export_to_string(&config)?,
+        RepositorySettings::export_to_string(&config)?,
         VpmTrackingPolicy::export_to_string(&config)?,
         IgnoreTemplateSettings::export_to_string(&config)?,
         AppSettings::export_to_string(&config)?,

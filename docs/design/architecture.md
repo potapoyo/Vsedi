@@ -101,7 +101,7 @@ M1 で実装する command contract は次のとおりである。
 | Command | 入力 | 戻り値 | 用途 |
 | --- | --- | --- | --- |
 | `inspect_environment` | なし | `EnvironmentDiagnostic` | OS / architecture / Git 診断 |
-| `inspect_project` | `path: string`, `vpmTrackingPolicy` | `ProjectDiagnostic` | Unity project と repository の診断 |
+| `inspect_project` | `path: string` | `ProjectDiagnostic` | Unity project と repository の診断。VPM方針は設定から解決 |
 | `load_settings` | なし | `SettingsLoadResult` | 設定読込と stale path の状態表示 |
 | `save_settings` | `AppSettings` | `void` | 許可された内部設定の保存 |
 | `export_diagnostic_log` | `destination: string` | `void` | redaction 済み診断ログの書出し |
@@ -214,7 +214,7 @@ PC 初期化・買い替え後の再構成に利用できる、バージョン�
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4ではprojectごとのアプリ内カテゴリを追加し、repository内へ設定fileを書き込まずに管理一覧を分類できるようにする。
+`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4ではprojectごとのアプリ内カテゴリ、schema 5ではrepositoryごとのVPM追跡方針overrideを追加する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
 
 ## Rust / TypeScript 型境界
 

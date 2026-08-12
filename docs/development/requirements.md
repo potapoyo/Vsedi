@@ -104,7 +104,7 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 - 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
 - 初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する
 - `settings.json` は Explorer / Finder 等から通常のファイルとしてコピーできること
-- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、projectカテゴリ追加後の現行schemaは `4` とする
+- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、projectカテゴリ追加後のschemaは `4`、repository固有設定追加後の現行schemaは `5` とする
 - 対応する `settings.json` を所定のアプリデータ領域へ手動配置した場合、Vsedi が通常の設定ファイルとして読み込めること
 - 古い schema は可能な範囲で migration し、未対応 schema や破損 JSON を黙って上書きしないこと
 - 手動復元された設定内の旧 PC の path が存在しない場合は、クラッシュせず再選択・再登録を促すこと

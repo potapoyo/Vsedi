@@ -34,12 +34,13 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
             {
                 for project in projects {
                     if let Some(project) = project.as_object_mut() {
-                        project
-                            .entry("category".to_owned())
-                            .or_insert(Value::Null);
+                        project.entry("category".to_owned()).or_insert(Value::Null);
                     }
                 }
             }
+        }
+        if schema_version < 5 {
+            object.insert("repositorySettings".to_owned(), Value::Array(Vec::new()));
         }
         if schema_version < CURRENT_SCHEMA_VERSION {
             object.insert(
@@ -67,7 +68,7 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 4);
+        assert_eq!(migrated["schemaVersion"], 5);
         assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
         assert_eq!(
             migrated["ignoreTemplates"]["unityRules"][0],
@@ -75,6 +76,9 @@ mod tests {
         );
         assert_eq!(migrated["recentProjects"][0]["path"], "/project");
         assert!(migrated["recentProjects"][0]["category"].is_null());
+        assert!(migrated["repositorySettings"]
+            .as_array()
+            .is_some_and(Vec::is_empty));
     }
 
     #[test]
@@ -90,7 +94,29 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 4);
+        assert_eq!(migrated["schemaVersion"], 5);
         assert!(migrated["recentProjects"][0]["category"].is_null());
+        assert!(migrated["repositorySettings"]
+            .as_array()
+            .is_some_and(Vec::is_empty));
+    }
+
+    #[test]
+    fn schema_four_adds_repository_settings() {
+        let migrated = migrate(
+            json!({
+                "schemaVersion": 4,
+                "recentProjects": [],
+                "vpmTrackingPolicy": "INCLUDE_PACKAGES",
+                "ignoreTemplates": { "unityRules": [], "vpmExcludeRules": [] }
+            }),
+            4,
+        )
+        .expect("migration");
+
+        assert_eq!(migrated["schemaVersion"], 5);
+        assert!(migrated["repositorySettings"]
+            .as_array()
+            .is_some_and(Vec::is_empty));
     }
 }

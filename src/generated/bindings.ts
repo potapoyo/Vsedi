@@ -70,6 +70,8 @@ export type RecentProject = { path: string, lastOpenedAt: string | null, categor
 
 export type RecentProjectStatus = { path: string, lastOpenedAt: string | null, category: string | null, exists: boolean, };
 
+export type RepositorySettings = { repositoryRoot: string, vpmTrackingPolicyOverride: VpmTrackingPolicy | null, };
+
 export type VpmTrackingPolicy = "EXCLUDE_PACKAGES" | "INCLUDE_PACKAGES";
 
 /**
@@ -78,7 +80,7 @@ export type VpmTrackingPolicy = "EXCLUDE_PACKAGES" | "INCLUDE_PACKAGES";
  */
 export type IgnoreTemplateSettings = { unityRules: Array<string>, vpmExcludeRules: Array<string>, };
 
-export type AppSettings = { schemaVersion: number, onboardingCompleted: boolean, recentProjects: Array<RecentProject>, logLevel: string, vpmTrackingPolicy: VpmTrackingPolicy, ignoreTemplates: IgnoreTemplateSettings, };
+export type AppSettings = { schemaVersion: number, onboardingCompleted: boolean, recentProjects: Array<RecentProject>, logLevel: string, vpmTrackingPolicy: VpmTrackingPolicy, ignoreTemplates: IgnoreTemplateSettings, repositorySettings: Array<RepositorySettings>, };
 
 export type SettingsLoadResult = { settings: AppSettings, recovered: boolean, backupPath: string | null, recentProjects: Array<RecentProjectStatus>, };
 

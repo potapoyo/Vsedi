@@ -48,7 +48,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
 | 画面分割 | 完了 | ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定 |
 | 管理Project・カテゴリ | 実装済み・未確定 | schema 4 migrationを含む未コミット差分。自動検証34件は成功済み |
-| repository固有設定 | 未着手 | VPM overrideとignore適用導線が残る |
+| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5へ保存し、診断・初期化で実効値を使用。ignore適用導線は残工程 |
 | UI smoke更新 | 未着手 | 画面分割・管理Project・カテゴリをテストケースへ反映する |
 | Windows native検証 | 中断中 | WebDriver session作成問題を解消後に再開する |
 | macOS最終native検証 | 未完了 | 旧UIの保存導線・DMGは確認済み。現行UIで再確認する |
@@ -104,6 +104,8 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 完了条件: 既存設定を失わずに全Projectを一覧でき、カテゴリが再起動後も保持される。
 
 ### Phase B — 設定画面の未完部分を実装する
+
+VPM tracking policyのrepository overrideとschema migrationは実装済み。Mac実機確認は端末ロック中のため未実施とし、ローカル自動検証で先行確認する。
 
 - repository固有のVPM追跡方針を「全体設定に従う / 除外する / 含める」で保存する
 - 実効値と、全体既定値・repository overrideのどちらが採用されたかを表示する

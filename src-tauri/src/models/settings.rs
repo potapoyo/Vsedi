@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 pub const DEFAULT_UNITY_IGNORE_RULES: &[&str] = &[
     "/[Ll]ibrary/*",
@@ -150,6 +150,14 @@ pub struct RecentProjectStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RepositorySettings {
+    pub repository_root: String,
+    #[serde(default)]
+    pub vpm_tracking_policy_override: Option<VpmTrackingPolicy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub schema_version: u32,
     #[serde(default)]
@@ -162,6 +170,8 @@ pub struct AppSettings {
     pub vpm_tracking_policy: VpmTrackingPolicy,
     #[serde(default)]
     pub ignore_templates: IgnoreTemplateSettings,
+    #[serde(default)]
+    pub repository_settings: Vec<RepositorySettings>,
 }
 
 fn default_log_level() -> String {
@@ -177,6 +187,7 @@ impl Default for AppSettings {
             log_level: default_log_level(),
             vpm_tracking_policy: VpmTrackingPolicy::default(),
             ignore_templates: IgnoreTemplateSettings::default(),
+            repository_settings: Vec::new(),
         }
     }
 }
