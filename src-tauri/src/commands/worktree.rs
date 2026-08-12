@@ -1,4 +1,8 @@
-use crate::{errors::AppResult, models::{RepositoryState, WorktreeSnapshot}, services::worktree};
+use crate::{
+    errors::AppResult,
+    models::{RepositoryState, WorktreeSnapshot},
+    services::worktree,
+};
 
 #[tauri::command]
 pub fn read_repository_state(project_path: String) -> AppResult<RepositoryState> {

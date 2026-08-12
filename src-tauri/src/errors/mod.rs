@@ -13,6 +13,7 @@ pub enum ErrorCode {
     SettingsReadFailed,
     SettingsWriteFailed,
     SettingsInvalidJson,
+    SettingsInvalidLogLevel,
     SettingsUnsupportedSchema,
     SettingsBackupFailed,
     FilesystemReadFailed,

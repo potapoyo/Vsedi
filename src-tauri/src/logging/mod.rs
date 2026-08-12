@@ -8,15 +8,19 @@ use std::{
     fs,
     io::Write,
     path::Path,
-    sync::Mutex,
+    sync::{Mutex, OnceLock},
     time::{Duration, SystemTime},
 };
 use tauri::AppHandle;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter};
 use url::Url;
 
 const RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+pub const LOG_LEVELS: [&str; 5] = ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+
+type LogFilterUpdater = Box<dyn Fn(EnvFilter) -> Result<(), String> + Send + Sync>;
+static LOG_FILTER_UPDATER: OnceLock<Mutex<Option<LogFilterUpdater>>> = OnceLock::new();
 
 pub struct LogGuard {
     _guard: Mutex<Option<WorkerGuard>>,
@@ -43,9 +47,10 @@ pub fn initialize(app: &AppHandle) -> AppResult<WorkerGuard> {
     prune_old_logs(&directory);
     let appender = tracing_appender::rolling::daily(&directory, "vsedi.log");
     let (writer, guard) = tracing_appender::non_blocking(appender);
-    let filter =
-        EnvFilter::try_new(std::env::var("VSEDI_LOG_LEVEL").unwrap_or_else(|_| "info".to_owned()))
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+    let configured_level = std::env::var("VSEDI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_owned());
+    let level = normalize_log_level(&configured_level).unwrap_or("INFO");
+    let filter = EnvFilter::new(level.to_ascii_lowercase());
+    let (filter_layer, filter_handle) = reload::Layer::new(filter);
     tracing_subscriber::registry()
         .with(
             fmt::layer()
@@ -53,7 +58,7 @@ pub fn initialize(app: &AppHandle) -> AppResult<WorkerGuard> {
                 .with_ansi(false)
                 .with_target(false),
         )
-        .with(filter)
+        .with(filter_layer)
         .try_init()
         .map_err(|error| {
             AppError::with_detail(
@@ -64,12 +69,71 @@ pub fn initialize(app: &AppHandle) -> AppResult<WorkerGuard> {
                 false,
             )
         })?;
+    let updater: LogFilterUpdater = Box::new(move |filter| {
+        filter_handle.reload(filter).map_err(|error| error.to_string())
+    });
+    *LOG_FILTER_UPDATER
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|_| {
+            AppError::simple(
+                ErrorCode::InternalError,
+                "ログ設定を更新できません。",
+                "initialize_logging",
+            )
+        })? = Some(updater);
     tracing::info!(
         operation = "initialize_logging",
         retention_days = 30,
+        log_level = level,
         "application logging initialized"
     );
     Ok(guard)
+}
+
+pub fn normalize_log_level(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "ERROR" => Some("ERROR"),
+        "WARN" | "WARNING" => Some("WARN"),
+        "INFO" => Some("INFO"),
+        "DEBUG" => Some("DEBUG"),
+        "TRACE" => Some("TRACE"),
+        _ => None,
+    }
+}
+
+pub fn set_log_level(value: &str) -> AppResult<&'static str> {
+    let level = normalize_log_level(value).ok_or_else(|| {
+        AppError::simple(
+            ErrorCode::SettingsInvalidLogLevel,
+            "ログレベルは ERROR / WARN / INFO / DEBUG / TRACE のいずれかを指定してください。",
+            "set_log_level",
+        )
+    })?;
+    let filter = EnvFilter::new(level.to_ascii_lowercase());
+    if let Some(updater) = LOG_FILTER_UPDATER
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|_| {
+            AppError::simple(
+                ErrorCode::InternalError,
+                "ログ設定を更新できません。",
+                "set_log_level",
+            )
+        })?
+        .as_ref()
+    {
+        updater(filter).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::InternalError,
+                "ログレベルを適用できませんでした。",
+                "set_log_level",
+                error.to_string(),
+                false,
+            )
+        })?;
+    }
+    Ok(level)
 }
 
 pub fn export_diagnostic_log(app: &AppHandle, destination: &Path) -> AppResult<()> {
@@ -184,7 +248,8 @@ pub fn read_recent_logs(app: &AppHandle, max_lines: usize) -> AppResult<LogSnaps
         .last()
         .and_then(|path| path.file_name())
         .map(|name| name.to_string_lossy().into_owned());
-    let mut lines = VecDeque::with_capacity(max_lines.min(500));
+    let unlimited = max_lines == usize::MAX;
+    let mut lines = VecDeque::new();
     for file in files {
         let content = fs::read_to_string(&file).map_err(|error| {
             AppError::from_io(
@@ -195,11 +260,11 @@ pub fn read_recent_logs(app: &AppHandle, max_lines: usize) -> AppResult<LogSnaps
             )
         })?;
         for line in redact_for_export(&content).lines() {
-            if max_lines == 0 {
+            if max_lines == 0 && !unlimited {
                 continue;
             }
             lines.push_back(line.to_owned());
-            if lines.len() > max_lines {
+            if !unlimited && lines.len() > max_lines {
                 lines.pop_front();
             }
         }
@@ -313,7 +378,15 @@ fn prune_old_logs(directory: &Path) {
 
 #[cfg(test)]
 mod tests {
-    use super::{redact_for_export, sanitize_remote_url, sanitize_text};
+    use super::{normalize_log_level, redact_for_export, sanitize_remote_url, sanitize_text};
+
+    #[test]
+    fn accepts_supported_log_levels_case_insensitively() {
+        assert_eq!(normalize_log_level("trace"), Some("TRACE"));
+        assert_eq!(normalize_log_level(" warning "), Some("WARN"));
+        assert_eq!(normalize_log_level("INFO"), Some("INFO"));
+        assert_eq!(normalize_log_level("verbose"), None);
+    }
 
     #[test]
     fn strips_credentials_from_urls() {

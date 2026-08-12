@@ -23,7 +23,8 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
         if schema_version < 3 {
             object.insert(
                 "ignoreTemplates".to_owned(),
-                serde_json::to_value(IgnoreTemplateSettings::default()).expect("default ignore templates serialize"),
+                serde_json::to_value(IgnoreTemplateSettings::default())
+                    .expect("default ignore templates serialize"),
             );
         }
         if schema_version < CURRENT_SCHEMA_VERSION {
@@ -54,7 +55,10 @@ mod tests {
 
         assert_eq!(migrated["schemaVersion"], 3);
         assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
-        assert_eq!(migrated["ignoreTemplates"]["unityRules"][0], "/[Ll]ibrary/*");
+        assert_eq!(
+            migrated["ignoreTemplates"]["unityRules"][0],
+            "/[Ll]ibrary/*"
+        );
         assert_eq!(migrated["recentProjects"][0]["path"], "/project");
     }
 }

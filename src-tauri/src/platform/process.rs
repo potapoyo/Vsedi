@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use tracing::trace;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessOutput {
@@ -52,17 +53,31 @@ pub(crate) fn run(
     args: &[&str],
     current_dir: Option<&Path>,
 ) -> io::Result<ProcessOutput> {
+    trace!(
+        operation = "run_process",
+        executable = %executable.display(),
+        arg_count = args.len(),
+        current_dir = ?current_dir.map(Path::display),
+        "external process started"
+    );
     let mut command = Command::new(executable);
     command.args(args);
     if let Some(directory) = current_dir {
         command.current_dir(directory);
     }
     let output = command.output()?;
-    Ok(ProcessOutput {
+    let process_output = ProcessOutput {
         status: output.status.code(),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    };
+    trace!(
+        operation = "run_process",
+        executable = %executable.display(),
+        status = ?process_output.status,
+        "external process completed"
+    );
+    Ok(process_output)
 }
 
 pub(crate) fn open_directory(path: &Path) -> io::Result<()> {

@@ -118,8 +118,14 @@ pub struct IgnoreTemplateSettings {
 impl Default for IgnoreTemplateSettings {
     fn default() -> Self {
         Self {
-            unity_rules: DEFAULT_UNITY_IGNORE_RULES.iter().map(|rule| (*rule).to_owned()).collect(),
-            vpm_exclude_rules: DEFAULT_VPM_EXCLUDE_IGNORE_RULES.iter().map(|rule| (*rule).to_owned()).collect(),
+            unity_rules: DEFAULT_UNITY_IGNORE_RULES
+                .iter()
+                .map(|rule| (*rule).to_owned())
+                .collect(),
+            vpm_exclude_rules: DEFAULT_VPM_EXCLUDE_IGNORE_RULES
+                .iter()
+                .map(|rule| (*rule).to_owned())
+                .collect(),
         }
     }
 }

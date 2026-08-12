@@ -32,6 +32,10 @@ Vsedi が新規 repository を初期化するときに提案する `.gitignore` 
 
 既定の `unityRules` は、GitHub の [Unity テンプレート](https://github.com/github/gitignore/blob/main/Unity.gitignore)へ、Vsedi利用者向けの `Library/metadata` と `Library/assetDatabase3` の保持ルールを統合したものです。
 
+### ログレベルとログ表示
+
+メイン画面の「ログ設定」から `ERROR` / `WARN` / `INFO` / `DEBUG` / `TRACE` を選択できます。変更は即時適用され、`settings.json` の `logLevel` に保存されます。ログ表示ウィンドウは、30日保持の対象になっているサニタイズ済みログを現在はすべて表示します。
+
 ## ドキュメント
 
 - [`docs/product/vision.md`](docs/product/vision.md) — 製品ビジョンと対象ユーザー

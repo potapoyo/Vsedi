@@ -1,5 +1,6 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
+    logging,
     models::{AppSettings, RecentProjectStatus, SettingsLoadResult, CURRENT_SCHEMA_VERSION},
     platform::paths::app_data_dir,
     settings::migration::migrate,
@@ -25,7 +26,18 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
         )
     })?;
     let path = directory.join("settings.json");
-    let (settings, recovered, backup_path) = load_file(&path)?;
+    let (mut settings, recovered, backup_path) = load_file(&path)?;
+    let normalized_log_level = logging::normalize_log_level(&settings.log_level).unwrap_or("INFO");
+    if settings.log_level != normalized_log_level {
+        warn!(
+            operation = "normalize_log_level",
+            configured_level = %settings.log_level,
+            fallback_level = normalized_log_level,
+            "invalid log level was replaced with INFO"
+        );
+        settings.log_level = normalized_log_level.to_owned();
+    }
+    logging::set_log_level(&settings.log_level)?;
 
     // The plugin store is the runtime persistence backend. The preflight above keeps
     // manual recovery and migration rules explicit before the store reads the file.
@@ -73,6 +85,13 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             "validate_settings_before_save",
         ));
     }
+    let log_level = logging::normalize_log_level(&settings.log_level).ok_or_else(|| {
+        AppError::simple(
+            ErrorCode::SettingsInvalidLogLevel,
+            "ログレベルは ERROR / WARN / INFO / DEBUG / TRACE のいずれかを指定してください。",
+            "validate_settings_before_save",
+        )
+    })?;
 
     let store = app.store("settings.json").map_err(|error| {
         AppError::with_detail(
@@ -97,11 +116,20 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             )
         })?,
     );
-    store.set("logLevel", json!(settings.log_level));
+    store.set("logLevel", json!(log_level));
     store.set("vpmTrackingPolicy", json!(settings.vpm_tracking_policy));
-    store.set("ignoreTemplates", serde_json::to_value(&settings.ignore_templates).map_err(|error| {
-        AppError::with_detail(ErrorCode::SettingsWriteFailed, "設定をシリアライズできませんでした。", "serialize_settings", error.to_string(), false)
-    })?);
+    store.set(
+        "ignoreTemplates",
+        serde_json::to_value(&settings.ignore_templates).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SettingsWriteFailed,
+                "設定をシリアライズできませんでした。",
+                "serialize_settings",
+                error.to_string(),
+                false,
+            )
+        })?,
+    );
     store.save().map_err(|error| {
         AppError::with_detail(
             ErrorCode::SettingsWriteFailed,
@@ -111,9 +139,10 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             true,
         )
     })?;
+    logging::set_log_level(log_level)?;
     info!(
         operation = "save_settings",
-        "settings saved through Tauri Store"
+        log_level, "settings saved through Tauri Store"
     );
     Ok(())
 }

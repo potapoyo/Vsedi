@@ -3,11 +3,15 @@ use ts_rs::{Config, TS};
 use vsedi_lib::{
     errors::{AppError, ErrorCode},
     models::{
-        AppSettings, ChangeKind, ChangedFile, CommitDetail, ConfigFileDiagnostic, DiagnosticSeverity, DiagnosticStatus, FileDiff, FileDiffKind, HistoryEntry, IgnoreFilePreview, IgnoreTemplateSettings, InitializeRepositoryRequest,
-        EnvironmentDiagnostic, FileDiagnosticStatus, GitDiagnostic, LogSnapshot,
-        PlatformDiagnostic, ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RepositoryBlockingReason, RepositoryInitializationPreview, RepositoryState,
-        RecentProject, RecentProjectStatus, RepositoryDiagnostic, SettingsLoadResult,
-        SaveRequest, SaveResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage, VpmTrackingPolicy, WorktreeSnapshot,
+        AppSettings, ChangeKind, ChangedFile, CommitDetail, ConfigFileDiagnostic,
+        DiagnosticSeverity, DiagnosticStatus, EnvironmentDiagnostic, FileDiagnosticStatus,
+        FileDiff, FileDiffKind, GitDiagnostic, HistoryEntry, IgnoreFilePreview,
+        IgnoreTemplateSettings, InitializeRepositoryRequest, LogSnapshot, PlatformDiagnostic,
+        ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RecentProject,
+        RecentProjectStatus, RepositoryBlockingReason, RepositoryDiagnostic,
+        RepositoryInitializationPreview, RepositoryState, SaveRequest, SaveResult,
+        SettingsLoadResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage, VpmTrackingPolicy,
+        WorktreeSnapshot,
     },
 };
 

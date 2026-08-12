@@ -116,6 +116,21 @@ function MainWindow() {
     }
   };
 
+  const updateLogLevel = async (logLevel: string) => {
+    if (!settings || settings.settings.logLevel === logLevel) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const nextSettings = { ...settings.settings, logLevel };
+      await saveSettings(nextSettings);
+      setSettings({ ...settings, settings: nextSettings });
+    } catch (caught) {
+      setError(normalizeError(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const previewInitialization = async () => {
     if (!project || !settings) return;
     setBusy(true); setError(null);
@@ -233,6 +248,19 @@ function MainWindow() {
           <Card>
             <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">System Git</h2><StatusPill label={environment?.git.status === "AVAILABLE" ? "利用可能" : "未検出"} tone={gitTone} /></div></CardHeader>
             <CardContent><p className="text-sm text-slate-600">{environment?.git.version ?? "Git を診断中"}</p><p className="mt-2 truncate text-xs text-slate-400">{environment?.git.executable ?? "PATH から検出します"}</p></CardContent>
+          </Card>
+        </section>
+
+        <section className="mt-5">
+          <Card>
+            <CardHeader><div className="flex items-center justify-between gap-4"><div><h2 className="font-semibold">ログ設定</h2><p className="mt-1 text-xs text-slate-500">変更は即時適用され、次回起動後も保持されます。</p></div><StatusPill label={settings?.settings.logLevel ?? "INFO"} tone="neutral" /></div></CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-4">
+              <label className="text-sm text-slate-700" htmlFor="log-level">ログレベル</label>
+              <select id="log-level" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={settings?.settings.logLevel ?? "INFO"} onChange={(event) => void updateLogLevel(event.target.value)} disabled={busy || !settings}>
+                {LOG_LEVEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <p className="text-xs text-slate-500">TRACEを選ぶと、現時点で取得できる最も詳細なログを記録します。ログ表示では保持期間内のログをすべて表示します。</p>
+            </CardContent>
           </Card>
         </section>
 
@@ -422,5 +450,13 @@ function issueClass(severity: ProjectDiagnostic["issues"][number]["severity"]) {
 function shouldShowIssuePath(issue: ProjectDiagnostic["issues"][number]) {
   return issue.code !== "GIT_ROOT_OUTSIDE_PROJECT" && Boolean(issue.path);
 }
+
+const LOG_LEVEL_OPTIONS = [
+  { value: "ERROR", label: "ERROR — エラーのみ" },
+  { value: "WARN", label: "WARN — 警告以上" },
+  { value: "INFO", label: "INFO — 通常" },
+  { value: "DEBUG", label: "DEBUG — 詳細" },
+  { value: "TRACE", label: "TRACE — 最詳細" },
+] as const;
 
 export default App;

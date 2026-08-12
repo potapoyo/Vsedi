@@ -85,5 +85,7 @@ pub async fn open_log_window(app: AppHandle) -> AppResult<()> {
 
 #[tauri::command]
 pub fn read_recent_logs(app: AppHandle) -> AppResult<LogSnapshot> {
-    logging::read_recent_logs(&app, 500)
+    // The log window is a diagnostic tool. Show every retained, redacted line
+    // for now so that changing the log level is immediately observable.
+    logging::read_recent_logs(&app, usize::MAX)
 }

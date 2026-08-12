@@ -249,7 +249,11 @@ pub struct CommitDetail {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum FileDiffKind { Text, Binary, Unavailable }
+pub enum FileDiffKind {
+    Text,
+    Binary,
+    Unavailable,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
