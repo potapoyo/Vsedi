@@ -71,7 +71,7 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
         .map(|project| RecentProjectStatus {
             path: project.path.clone(),
             last_opened_at: project.last_opened_at.clone(),
-            category: project.category.clone(),
+            tags: project.tags.clone(),
             exists: Path::new(&project.path).is_dir(),
         })
         .collect::<Vec<_>>();
@@ -100,11 +100,14 @@ pub fn save(app: &AppHandle, mut settings: AppSettings) -> AppResult<()> {
         )
     })?;
     for project in &mut settings.recent_projects {
-        project.category = project
-            .category
-            .take()
-            .map(|category| category.trim().to_owned())
-            .filter(|category| !category.is_empty());
+        let mut normalized_tags = Vec::with_capacity(project.tags.len());
+        for tag in project.tags.drain(..) {
+            let tag = tag.trim();
+            if !tag.is_empty() && !normalized_tags.iter().any(|existing| existing == tag) {
+                normalized_tags.push(tag.to_owned());
+            }
+        }
+        project.tags = normalized_tags;
     }
     normalize_repository_settings(&mut settings.repository_settings);
 
@@ -478,19 +481,19 @@ mod tests {
             RecentProjectStatus {
                 path: "/older".to_owned(),
                 last_opened_at: Some("2026-08-11T00:00:00Z".to_owned()),
-                category: None,
+                tags: Vec::new(),
                 exists: true,
             },
             RecentProjectStatus {
                 path: "/newer".to_owned(),
                 last_opened_at: Some("2026-08-12T00:00:00Z".to_owned()),
-                category: Some("Avatar".to_owned()),
+                tags: vec!["Avatar".to_owned()],
                 exists: true,
             },
             RecentProjectStatus {
                 path: "/unknown".to_owned(),
                 last_opened_at: None,
-                category: None,
+                tags: Vec::new(),
                 exists: false,
             },
         ];

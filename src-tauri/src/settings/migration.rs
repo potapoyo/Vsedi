@@ -34,13 +34,36 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
             {
                 for project in projects {
                     if let Some(project) = project.as_object_mut() {
-                        project.entry("category".to_owned()).or_insert(Value::Null);
+                        project
+                            .entry("tags".to_owned())
+                            .or_insert_with(|| Value::Array(Vec::new()));
                     }
                 }
             }
         }
         if schema_version < 5 {
             object.insert("repositorySettings".to_owned(), Value::Array(Vec::new()));
+        }
+        if schema_version < 6 {
+            if let Some(projects) = object
+                .get_mut("recentProjects")
+                .and_then(Value::as_array_mut)
+            {
+                for project in projects {
+                    if let Some(project) = project.as_object_mut() {
+                        let tags = match project.remove("category") {
+                            Some(Value::String(category)) if !category.trim().is_empty() => {
+                                Value::Array(vec![Value::String(category)])
+                            }
+                            Some(Value::Array(tags)) => Value::Array(tags),
+                            _ => project
+                                .remove("tags")
+                                .unwrap_or_else(|| Value::Array(Vec::new())),
+                        };
+                        project.insert("tags".to_owned(), tags);
+                    }
+                }
+            }
         }
         if schema_version < CURRENT_SCHEMA_VERSION {
             object.insert(
@@ -68,14 +91,14 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 5);
+        assert_eq!(migrated["schemaVersion"], 6);
         assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
         assert_eq!(
             migrated["ignoreTemplates"]["unityRules"][0],
             "/[Ll]ibrary/*"
         );
         assert_eq!(migrated["recentProjects"][0]["path"], "/project");
-        assert!(migrated["recentProjects"][0]["category"].is_null());
+        assert_eq!(migrated["recentProjects"][0]["tags"], serde_json::json!([]));
         assert!(migrated["repositorySettings"]
             .as_array()
             .is_some_and(Vec::is_empty));
@@ -94,8 +117,8 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 5);
-        assert!(migrated["recentProjects"][0]["category"].is_null());
+        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["recentProjects"][0]["tags"], serde_json::json!([]));
         assert!(migrated["repositorySettings"]
             .as_array()
             .is_some_and(Vec::is_empty));
@@ -114,9 +137,26 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 5);
+        assert_eq!(migrated["schemaVersion"], 6);
         assert!(migrated["repositorySettings"]
             .as_array()
             .is_some_and(Vec::is_empty));
+    }
+
+    #[test]
+    fn schema_five_converts_project_category_to_a_tag() {
+        let migrated = migrate(
+            json!({
+                "schemaVersion": 5,
+                "recentProjects": [{ "path": "/project", "category": " Avatar " }],
+                "repositorySettings": []
+            }),
+            5,
+        )
+        .expect("migration");
+
+        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["recentProjects"][0]["tags"], json!([" Avatar "]));
+        assert!(migrated["recentProjects"][0].get("category").is_none());
     }
 }

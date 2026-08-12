@@ -70,9 +70,9 @@ export type FileDiffKind = "TEXT" | "BINARY" | "UNAVAILABLE";
 
 export type FileDiff = { path: string, kind: FileDiffKind, patch: string | null, truncated: boolean, truncationReason: string | null, };
 
-export type RecentProject = { path: string, lastOpenedAt: string | null, category: string | null, };
+export type RecentProject = { path: string, lastOpenedAt: string | null, tags: Array<string>, };
 
-export type RecentProjectStatus = { path: string, lastOpenedAt: string | null, category: string | null, exists: boolean, };
+export type RecentProjectStatus = { path: string, lastOpenedAt: string | null, tags: Array<string>, exists: boolean, };
 
 export type RepositorySettings = { repositoryRoot: string, vpmTrackingPolicyOverride: VpmTrackingPolicy | null, };
 

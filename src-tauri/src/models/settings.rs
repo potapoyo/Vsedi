@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 5;
+pub const CURRENT_SCHEMA_VERSION: u32 = 6;
 
 pub const DEFAULT_UNITY_IGNORE_RULES: &[&str] = &[
     "/[Ll]ibrary/*",
@@ -136,7 +136,7 @@ pub struct RecentProject {
     pub path: String,
     pub last_opened_at: Option<String>,
     #[serde(default)]
-    pub category: Option<String>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
@@ -144,7 +144,7 @@ pub struct RecentProject {
 pub struct RecentProjectStatus {
     pub path: String,
     pub last_opened_at: Option<String>,
-    pub category: Option<String>,
+    pub tags: Vec<String>,
     pub exists: bool,
 }
 
