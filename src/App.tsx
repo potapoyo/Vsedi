@@ -86,7 +86,7 @@ function MainWindow() {
     setHistory(entries);
   };
 
-  const selectProject = async (path: string) => {
+  const selectProject = async (path: string, replacedPath?: string) => {
     if (!settings) return;
     const generation = ++selectionGeneration.current;
     await run("project を開く", async () => {
@@ -94,18 +94,19 @@ function MainWindow() {
       if (generation !== selectionGeneration.current) return;
       clearRepositoryData();
       setProject(result);
-      const existing = settings.settings.recentProjects.find((item) => item.path === result.path);
+      const existing = settings.settings.recentProjects.find((item) => item.path === result.path)
+        ?? settings.settings.recentProjects.find((item) => item.path === replacedPath);
       const updatedProject = { path: result.path, lastOpenedAt: new Date().toISOString(), category: existing?.category ?? null };
       const nextSettings = {
         ...settings.settings,
-        recentProjects: [updatedProject, ...settings.settings.recentProjects.filter((item) => item.path !== result.path)],
+        recentProjects: [updatedProject, ...settings.settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
       };
       await saveSettings(nextSettings);
       if (generation !== selectionGeneration.current) return;
       setSettings({
         ...settings,
         settings: nextSettings,
-        recentProjects: [{ ...updatedProject, exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path)],
+        recentProjects: [{ ...updatedProject, exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
       });
       setRoute({ page: "REPOSITORY", section: "WORK" });
       if (result.repository.detected) await reloadRepositoryData(result.path, generation);
@@ -120,6 +121,28 @@ function MainWindow() {
     } catch (caught) {
       setError(normalizeError(caught));
     }
+  };
+
+  const reassignManagedProject = async (path: string) => {
+    if (!settings) return;
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "移動後のproject folderを選択" });
+      if (typeof selected === "string") await selectProject(selected, path);
+    } catch (caught) {
+      setError(normalizeError(caught));
+    }
+  };
+
+  const removeManagedProject = async (path: string) => {
+    if (!settings) return;
+    const nextSettings = {
+      ...settings.settings,
+      recentProjects: settings.settings.recentProjects.filter((item) => item.path !== path),
+    };
+    await run("管理Projectを削除", async () => {
+      await saveSettings(nextSettings);
+      setSettings((current) => current ? { ...current, settings: nextSettings, recentProjects: current.recentProjects.filter((item) => item.path !== path) } : current);
+    });
   };
 
   const updateSettings = async (nextSettings: SettingsLoadResult["settings"]) => {
@@ -310,6 +333,8 @@ function MainWindow() {
               busy={isBusy}
               onChooseProject={() => void chooseProject()}
               onOpenProject={(path) => void selectProject(path)}
+              onReassignProject={(path) => void reassignManagedProject(path)}
+              onRemoveProject={(path) => void removeManagedProject(path)}
               onSetCategory={(path, category) => void updateProjectCategory(path, category)}
               onOpenSettings={() => setRoute({ page: "GLOBAL_SETTINGS", section: "ENVIRONMENT" })}
             />
@@ -424,16 +449,16 @@ function AppHeader({ pageTitle, project, repositoryState, pending, onRefresh }: 
   );
 }
 
-function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onSetCategory, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void; onOpenSettings: () => void }) {
+function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onReassignProject, onRemoveProject, onSetCategory, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void; onOpenSettings: () => void }) {
   const gitAvailable = environment?.git.status === "AVAILABLE";
   return <div className="space-y-6">
     <section className="rounded-3xl bg-slate-900 px-6 py-7 text-white shadow-panel sm:px-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className="mt-3 text-3xl font-bold tracking-tight">管理する project を選択</h3><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p><Button className="mt-5 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button></section>
     {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
-    <ManagedProjectList projects={settings?.recentProjects ?? []} busy={busy} onOpenProject={onOpenProject} onSetCategory={onSetCategory} />
+    <ManagedProjectList projects={settings?.recentProjects ?? []} busy={busy} onOpenProject={onOpenProject} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} onSetCategory={onSetCategory} />
   </div>;
 }
 
-function ManagedProjectList({ projects, busy, onOpenProject, onSetCategory }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void }) {
+function ManagedProjectList({ projects, busy, onOpenProject, onReassignProject, onRemoveProject, onSetCategory }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void }) {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [categoryDraft, setCategoryDraft] = useState("");
@@ -456,7 +481,7 @@ function ManagedProjectList({ projects, busy, onOpenProject, onSetCategory }: { 
     setEditingPath(null);
   };
 
-  return <section><div className="mb-3 flex flex-wrap items-end justify-between gap-4"><div><h3 className="text-lg font-bold">管理しているProject</h3><p className="mt-1 text-sm text-slate-500">最終更新が新しい順に表示します。</p></div><div className="flex items-center gap-3"><label className="text-xs font-semibold text-slate-500" htmlFor="project-category-filter">カテゴリ</label><select id="project-category-filter" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="ALL">すべて</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><span className="text-xs text-slate-400">{visibleProjects.length} 件</span></div></div>{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p>{item.category && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{item.category}</span>}{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex gap-2"><Button variant="secondary" onClick={() => startCategoryEdit(item.path, item.category)} disabled={busy}>カテゴリ設定</Button><Button onClick={() => onOpenProject(item.path)} disabled={busy || !item.exists}>開く</Button></div></div>{editingPath === item.path && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><input className="min-w-48 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryDraft} maxLength={40} onChange={(event) => setCategoryDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCategory(item.path); }} placeholder="例: Avatar、World、作業中" autoFocus disabled={busy} /><Button onClick={() => saveCategory(item.path)} disabled={busy}>保存</Button>{item.category && <Button variant="secondary" onClick={() => { onSetCategory(item.path, null); setEditingPath(null); }} disabled={busy}>カテゴリを外す</Button>}<Button variant="ghost" onClick={() => setEditingPath(null)} disabled={busy}>キャンセル</Button></div>}</CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "このカテゴリにProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
+  return <section><div className="mb-3 flex flex-wrap items-end justify-between gap-4"><div><h3 className="text-lg font-bold">管理しているProject</h3><p className="mt-1 text-sm text-slate-500">最終更新が新しい順に表示します。</p></div><div className="flex items-center gap-3"><label className="text-xs font-semibold text-slate-500" htmlFor="project-category-filter">カテゴリ</label><select id="project-category-filter" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="ALL">すべて</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><span className="text-xs text-slate-400">{visibleProjects.length} 件</span></div></div>{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p>{item.category && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{item.category}</span>}{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" onClick={() => startCategoryEdit(item.path, item.category)} disabled={busy}>カテゴリ設定</Button>{item.exists ? <Button onClick={() => onOpenProject(item.path)} disabled={busy}>開く</Button> : <Button onClick={() => onReassignProject(item.path)} disabled={busy}>場所を再指定</Button>}<Button variant="ghost" onClick={() => onRemoveProject(item.path)} disabled={busy}>一覧から削除</Button></div></div>{editingPath === item.path && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><input className="min-w-48 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryDraft} maxLength={40} onChange={(event) => setCategoryDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCategory(item.path); }} placeholder="例: Avatar、World、作業中" autoFocus disabled={busy} /><Button onClick={() => saveCategory(item.path)} disabled={busy}>保存</Button>{item.category && <Button variant="secondary" onClick={() => { onSetCategory(item.path, null); setEditingPath(null); }} disabled={busy}>カテゴリを外す</Button>}<Button variant="ghost" onClick={() => setEditingPath(null)} disabled={busy}>キャンセル</Button></div>}</CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "このカテゴリにProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
 }
 
 function WorkPage({ project, repositoryState, worktree, initializationPreview, saveResult, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onSave, onShowDiff, fileDiff, onGoToRepositorySettings }: {

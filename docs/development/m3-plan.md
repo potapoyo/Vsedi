@@ -47,7 +47,8 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | 保存履歴・commit詳細 | 完了 | text / binary / unavailable / truncatedを区別する |
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
 | 画面分割 | 完了 | ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定 |
-| 管理Project・カテゴリ | 実装済み・未確定 | schema 4 migrationを含む未コミット差分。自動検証34件は成功済み |
+| 管理Project・カテゴリ | 実装済み | schema 4 migration、最終更新順、カテゴリ設定・絞り込みを実装済み |
+| stale Project管理 | 実装済み・未実機確認 | 場所の再指定、一覧からの削除、重複登録防止を実装 |
 | repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5へ保存し、診断・初期化で実効値を使用 |
 | ignore template・差分適用 | 実装済み・未実機確認 | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
 | UI smoke更新 | 未着手 | 画面分割・管理Project・カテゴリをテストケースへ反映する |
