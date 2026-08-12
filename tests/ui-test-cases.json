@@ -1,0 +1,28 @@
+{
+  "screens": {
+    "main": {
+      "title": "メイン画面の基本表示",
+      "url": "/",
+      "navigations": [],
+      "assertions": [
+        { "type": "element", "selector": "h1", "text": "Vsedi" },
+        { "type": "element", "selector": "main", "text": "実行環境" },
+        { "type": "element", "selector": "main", "text": "System Git" },
+        { "type": "button", "selector": "button", "text": "フォルダを選択" }
+      ],
+      "screenshot": { "onSuccess": true, "onFailure": true }
+    },
+    "settings": {
+      "title": "診断済み project の設定表示",
+      "url": "/",
+      "navigations": [],
+      "assertions": [
+        { "type": "element", "selector": "main", "text": "VPM packageのGit管理" },
+        { "type": "element", "selector": "main", "text": "VPM packages" },
+        { "type": "element", "selector": "main", "text": "/fixtures/test-project" },
+        { "type": "button", "selector": "button", "text": "除外する" }
+      ],
+      "screenshot": { "onSuccess": true, "onFailure": true }
+    }
+  }
+}
