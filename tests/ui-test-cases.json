@@ -1,0 +1,20 @@
+{
+  "cases": {
+    "home-project-management": {
+      "title": "ホームのProject管理・お知らせ・検索",
+      "screenshot": true
+    },
+    "repository-work-history": {
+      "title": "現在の作業から保存履歴・diffまで",
+      "screenshot": true
+    },
+    "repository-settings": {
+      "title": "リポジトリ設定のタグ・VPM方針",
+      "screenshot": true
+    },
+    "global-settings": {
+      "title": "全体設定の画面切り替え",
+      "screenshot": true
+    }
+  }
+}

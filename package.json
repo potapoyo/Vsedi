@@ -12,7 +12,10 @@
     "tauri:build:macos": "env CI=true tauri build",
     "typecheck": "tsc --noEmit",
     "generate-types": "cargo run --manifest-path src-tauri/Cargo.toml --bin export_types",
-    "check-generated-types": "sh scripts/check-generated-types.sh"
+    "check-generated-types": "sh scripts/check-generated-types.sh",
+    "test": "playwright test",
+    "test:ui": "playwright test",
+    "test:ui:watch": "playwright test --ui"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.0",
+    "@playwright/test": "^1.55.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.2",

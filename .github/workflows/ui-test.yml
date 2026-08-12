@@ -1,0 +1,43 @@
+name: UI Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-case:
+        description: "テストケース名（空欄で全ケース）"
+        required: false
+        default: ""
+
+jobs:
+  ui-test:
+    name: ${{ matrix.os }} / Chromium
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      UI_TEST_CASE: ${{ inputs.test-case }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install chromium
+      - run: pnpm test:ui
+      - name: Upload UI test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-${{ matrix.os }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14

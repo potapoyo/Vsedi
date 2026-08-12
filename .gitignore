@@ -6,3 +6,5 @@ src-tauri/target/
 *.log
 src-tauri/gen/schemas/macOS-schema.json
 src-tauri/gen/schemas/windows-schema.json
+test-results/
+playwright-report/
