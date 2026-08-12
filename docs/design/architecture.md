@@ -10,6 +10,8 @@ Web フロントエンドは状態表示とユーザー操作の受付を担当�
 
 Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から TypeScript 型を生成する。
 
+メインウィンドウの画面遷移、repository workspace、全体設定とrepository設定の境界は [`application-navigation-and-settings.md`](application-navigation-and-settings.md) に従う。
+
 M1 の実装は `src-tauri/src` に次の境界を持つ。`commands` は Tauri の薄い入口、`services` はユースケース、`git` / `platform` / `settings` は具体的な外部状態との接続を担当する。
 
 ```text
