@@ -320,6 +320,7 @@ function MainWindow() {
             project={route.page === "REPOSITORY" ? project : null}
             repositoryState={repositoryState}
             pending={pending}
+            onAddProject={route.page === "HOME" ? () => void chooseProject() : undefined}
             onRefresh={() => void refreshApplication()}
           />
 
@@ -331,7 +332,6 @@ function MainWindow() {
               environment={environment}
               settings={settings}
               busy={isBusy}
-              onChooseProject={() => void chooseProject()}
               onOpenProject={(path) => void selectProject(path)}
               onOpenRepositorySettings={(path) => void selectProject(path, undefined, "SETTINGS")}
               onReassignProject={(path) => void reassignManagedProject(path)}
@@ -441,11 +441,11 @@ function NavigationButton({ active, children, onClick }: { active: boolean; chil
   return <button type="button" onClick={onClick} className={`flex w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{children}</button>;
 }
 
-function AppHeader({ pageTitle, project, repositoryState, pending, onRefresh }: { pageTitle: string; project: ProjectDiagnostic | null; repositoryState: RepositoryState | null; pending: string | null; onRefresh: () => void }) {
+function AppHeader({ pageTitle, project, repositoryState, pending, onAddProject, onRefresh }: { pageTitle: string; project: ProjectDiagnostic | null; repositoryState: RepositoryState | null; pending: string | null; onAddProject?: () => void; onRefresh: () => void }) {
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
       <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Vsedi</p><h2 className="mt-1 text-2xl font-bold tracking-tight">{pageTitle}</h2>{project && <p className="mt-1 break-all text-sm text-slate-500">{project.path}{repositoryState?.root && repositoryState.root !== project.path ? ` · 保存対象: ${repositoryState.root}` : ""}</p>}</div>
-      <div className="flex items-center gap-2">{pending && <span className="text-xs text-slate-500">{pending}…</span>}<Button variant="ghost" onClick={onRefresh} disabled={Boolean(pending)}>再読込</Button></div>
+      <div className="flex items-center gap-2">{pending && <span className="text-xs text-slate-500">{pending}…</span>}{onAddProject && <Button variant="secondary" onClick={onAddProject} disabled={Boolean(pending)}>Projectを追加</Button>}<Button variant="ghost" onClick={onRefresh} disabled={Boolean(pending)}>再読込</Button></div>
     </header>
   );
 }
@@ -479,11 +479,11 @@ function FolderIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.5 6.5h6l1.7 2h9.3v9.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7V6.5Z" /></svg>;
 }
 
-function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onOpenSettings: () => void }) {
+function HomePage({ environment, settings, busy, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onOpenSettings: () => void }) {
   const gitAvailable = environment?.git.status === "AVAILABLE";
   const [introCollapsed, setIntroCollapsed] = useState(false);
   return <div className="space-y-6">
-    <section className={`relative rounded-3xl bg-slate-900 text-white shadow-panel ${introCollapsed ? "px-6 py-4 sm:px-8" : "px-6 py-7 sm:px-8"}`}><button type="button" className="absolute right-4 top-4 rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white" onClick={() => setIntroCollapsed((current) => !current)} aria-expanded={!introCollapsed} aria-label={introCollapsed ? "案内を展開" : "案内を最小化"} title={introCollapsed ? "案内を展開" : "案内を最小化"}><ChevronIcon direction={introCollapsed ? "down" : "up"} /></button><div className={introCollapsed ? "flex items-center justify-between gap-4 pr-8" : "pr-8"}><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className={`${introCollapsed ? "mt-1 text-lg" : "mt-3 text-3xl"} font-bold tracking-tight`}>管理する project を選択</h3>{!introCollapsed && <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p>}</div>{introCollapsed && <Button className="shrink-0 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button>}</div>{!introCollapsed && <Button className="mt-5 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button>}</section>
+    <section className={`relative rounded-3xl bg-slate-900 text-white shadow-panel ${introCollapsed ? "px-6 py-4 sm:px-8" : "px-6 py-7 sm:px-8"}`}><button type="button" className="absolute right-4 top-4 rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white" onClick={() => setIntroCollapsed((current) => !current)} aria-expanded={!introCollapsed} aria-label={introCollapsed ? "お知らせを展開" : "お知らせを最小化"} title={introCollapsed ? "お知らせを展開" : "お知らせを最小化"}><ChevronIcon direction={introCollapsed ? "down" : "up"} /></button><div className="pr-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className={`${introCollapsed ? "mt-1 text-lg" : "mt-3 text-3xl"} font-bold tracking-tight`}>管理する project を選択</h3>{!introCollapsed && <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p>}</div></section>
     {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
     {settings ? <ManagedProjectList projects={settings.recentProjects} busy={busy} onOpenProject={onOpenProject} onOpenRepositorySettings={onOpenRepositorySettings} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} /> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">管理Projectを読み込んでいます…</p></CardContent></Card>}
   </div>;
