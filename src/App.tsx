@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { LogWindow } from "@/LogWindow";
-import type { AppError, EnvironmentDiagnostic, ProjectDiagnostic, SettingsLoadResult, VpmTrackingPolicy } from "@/generated/bindings";
-import { exportDiagnosticLog, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, saveSettings } from "@/lib/commands";
+import type { AppError, CommitDetail, EnvironmentDiagnostic, FileDiff, HistoryEntry, ProjectDiagnostic, RepositoryInitializationPreview, RepositoryState, SaveResult, SettingsLoadResult, VpmTrackingPolicy, WorktreeSnapshot } from "@/generated/bindings";
+import { exportDiagnosticLog, initializeRepository, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, previewRepositoryInitialization, readCommitDetail, readCommitDiff, readHistory, readRepositoryState, readWorktreeDiff, readWorktreeSnapshot, saveSettings, saveWorktree } from "@/lib/commands";
 
 function App() {
   if (currentWindowLabel() === "logs") return <LogWindow />;
@@ -17,6 +17,14 @@ function MainWindow() {
   const [environment, setEnvironment] = useState<EnvironmentDiagnostic | null>(null);
   const [settings, setSettings] = useState<SettingsLoadResult | null>(null);
   const [project, setProject] = useState<ProjectDiagnostic | null>(null);
+  const [repositoryState, setRepositoryState] = useState<RepositoryState | null>(null);
+  const [worktree, setWorktree] = useState<WorktreeSnapshot | null>(null);
+  const [initializationPreview, setInitializationPreview] = useState<RepositoryInitializationPreview | null>(null);
+  const [saveMemo, setSaveMemo] = useState("");
+  const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [commitDetail, setCommitDetail] = useState<CommitDetail | null>(null);
+  const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
 
@@ -40,6 +48,27 @@ function MainWindow() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!project?.repository.detected) {
+      setRepositoryState(null);
+      setWorktree(null);
+      setHistory([]);
+      setCommitDetail(null);
+      setFileDiff(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const [state, snapshot, historyEntries] = await Promise.all([readRepositoryState(project.path), readWorktreeSnapshot(project.path), readHistory(project.path)]);
+        setRepositoryState(state);
+        setWorktree(snapshot);
+        setHistory(historyEntries);
+      } catch (caught) {
+        setError(normalizeError(caught));
+      }
+    })();
+  }, [project?.path, project?.repository.detected]);
 
   const gitTone = environment?.git.status === "AVAILABLE" ? "good" : "warn";
   const chooseProject = async () => {
@@ -77,6 +106,56 @@ function MainWindow() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const previewInitialization = async () => {
+    if (!project || !settings) return;
+    setBusy(true); setError(null);
+    try { setInitializationPreview(await previewRepositoryInitialization(project.path)); }
+    catch (caught) { setError(normalizeError(caught)); }
+    finally { setBusy(false); }
+  };
+
+  const applyInitialization = async () => {
+    if (!project || !settings || !initializationPreview) return;
+    setBusy(true); setError(null);
+    try {
+      await initializeRepository({ projectPath: project.path, statusToken: initializationPreview.statusToken });
+      setInitializationPreview(null);
+      setProject(await inspectProject(project.path, settings.settings.vpmTrackingPolicy));
+    } catch (caught) { setError(normalizeError(caught)); }
+    finally { setBusy(false); }
+  };
+
+  const saveCurrentWork = async () => {
+    if (!project || !worktree) return;
+    setBusy(true); setError(null); setSaveResult(null);
+    try {
+      const result = await saveWorktree({ projectPath: project.path, statusToken: worktree.statusToken, memo: saveMemo });
+      setSaveResult(result); setSaveMemo("");
+      const [state, snapshot, historyEntries] = await Promise.all([readRepositoryState(project.path), readWorktreeSnapshot(project.path), readHistory(project.path)]);
+      setRepositoryState(state); setWorktree(snapshot);
+      setHistory(historyEntries);
+    } catch (caught) { setError(normalizeError(caught)); }
+    finally { setBusy(false); }
+  };
+
+  const selectCommit = async (entry: HistoryEntry) => {
+    if (!project) return;
+    try { setCommitDetail(await readCommitDetail(project.path, entry.commitId)); }
+    catch (caught) { setError(normalizeError(caught)); }
+  };
+
+  const showCommitDiff = async (path: string) => {
+    if (!project || !commitDetail) return;
+    try { setFileDiff(await readCommitDiff(project.path, commitDetail.commitId, path)); }
+    catch (caught) { setError(normalizeError(caught)); }
+  };
+
+  const showWorktreeDiff = async (path: string) => {
+    if (!project) return;
+    try { setFileDiff(await readWorktreeDiff(project.path, path)); }
+    catch (caught) { setError(normalizeError(caught)); }
   };
 
   const exportLog = async () => {
@@ -216,6 +295,45 @@ function MainWindow() {
                       現在の診断範囲では、修正が必要な状態は見つかりませんでした。
                     </div>
                   )}
+
+                  {project.repository.detected && (
+                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">現在の変更</p>
+                          <p className="mt-1 text-xs text-slate-500">保存対象は repository 全体です。保存機能は次の M3 作業で追加します。</p>
+                        </div>
+                        <StatusPill label={repositoryState?.canSave ? "保存可能" : repositoryState ? "確認が必要" : "読み込み中"} tone={repositoryState?.canSave ? "good" : "warn"} />
+                      </div>
+                      {repositoryState?.blockingReason === "EXISTING_STAGED_CHANGES" && <p className="mt-3 text-xs text-amber-800">すでに Git のステージにある変更があるため、安全のため保存を開始できません。</p>}
+                      {repositoryState?.blockingReason === "CONFLICT" && <p className="mt-3 text-xs text-rose-800">競合中のファイルがあるため、保存を開始できません。</p>}
+                      {worktree && <div className="mt-3 space-y-2">{worktree.files.length ? worktree.files.map((file) => <button type="button" onClick={() => void showWorktreeDiff(file.path)} key={`${file.path}-${file.oldPath ?? ""}`} className="flex w-full items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs hover:bg-slate-100"><span className="min-w-0 truncate text-slate-700" title={file.path}>{file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</span><span className="shrink-0 text-slate-500">{changeKindLabel(file.changeKind)}{file.outsideProject ? " · project外" : ""}</span></button>) : <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">保存対象の変更はありません。</p>}</div>}
+                      {repositoryState?.canSave && worktree?.files.length ? <div className="mt-3 flex flex-wrap gap-2"><input className="min-w-56 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" value={saveMemo} onChange={(event) => setSaveMemo(event.target.value)} placeholder="保存メモ（例: アバターの表情を調整）" disabled={busy} /><Button onClick={() => void saveCurrentWork()} disabled={busy || !saveMemo.trim()}>作業を保存</Button></div> : null}
+                      {saveResult && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">保存しました: {saveResult.shortCommitId} · {saveResult.fileCount} file · {saveResult.authorTime}</p>}
+                    </div>
+                  )}
+
+                  {project.isUnityProject && project.repository.detected === false && (
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
+                      <p className="text-sm font-semibold text-sky-900">ローカル保存を始める</p>
+                      <p className="mt-1 text-xs leading-5 text-sky-800">Git repository と Unity 用の ignore rule を作成します。既存の .gitignore は置換せず、不足ルールだけを追記します。</p>
+                      {!initializationPreview ? <Button className="mt-3" onClick={() => void previewInitialization()} disabled={busy}>作成内容を確認</Button> : (
+                        <div className="mt-3 space-y-3 rounded-lg bg-white/80 p-3">
+                          {initializationPreview.ignoreFiles.map((file) => <p key={file.path} className="text-xs text-slate-700"><span className="font-semibold">{file.path}</span>: {file.missingRules.length ? file.missingRules.join("、") : "変更なし"}{file.willCreate ? "（新規作成）" : ""}</p>)}
+                          {initializationPreview.canInitialize ? <div className="flex gap-2"><Button onClick={() => void applyInitialization()} disabled={busy}>この内容で初期化</Button><Button variant="secondary" onClick={() => setInitializationPreview(null)} disabled={busy}>キャンセル</Button></div> : <p className="text-xs text-rose-800">{initializationPreview.blockingReason}</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {project.repository.detected && (
+                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                      <p className="text-sm font-semibold text-slate-700">保存履歴</p>
+                      {history.length ? <div className="mt-3 space-y-2">{history.map((entry) => <button type="button" key={entry.commitId} onClick={() => void selectCommit(entry)} className="flex w-full items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs hover:bg-slate-100"><span className="min-w-0 truncate text-slate-700">{entry.memo}</span><span className="shrink-0 text-slate-500">{entry.shortCommitId}</span></button>)}</div> : <p className="mt-2 text-xs text-slate-500">まだ保存履歴はありません。</p>}
+                      {commitDetail && <div className="mt-3 rounded-lg border border-slate-200 p-3 text-xs"><p className="font-semibold text-slate-800">{commitDetail.memo}</p><p className="mt-1 text-slate-500">{commitDetail.commitId} · {commitDetail.authorTime}</p><div className="mt-2 space-y-1">{commitDetail.files.map((file) => <button type="button" onClick={() => void showCommitDiff(file.path)} key={`${file.path}-${file.oldPath ?? ""}`} className="block max-w-full truncate text-left text-slate-600 hover:text-accent">{changeKindLabel(file.changeKind)} · {file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</button>)}</div></div>}
+                      {fileDiff && <div className="mt-3 rounded-lg border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100"><p className="mb-2 break-all text-slate-300">{fileDiff.path} · {fileDiff.kind === "TEXT" ? "text diff" : fileDiff.kind === "BINARY" ? "binary" : "表示不可"}</p>{fileDiff.patch ? <pre className="max-h-72 overflow-auto whitespace-pre-wrap">{fileDiff.patch}</pre> : <p className="text-slate-300">{fileDiff.truncationReason ?? "テキストとして表示できません。"}</p>}{fileDiff.truncated && <p className="mt-2 text-amber-300">{fileDiff.truncationReason}</p>}</div>}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / VRChat / Git 設定を診断します。</div>
@@ -266,6 +384,13 @@ function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) {
     VRCHAT_AVATAR: "VRChat Avatar",
     VRCHAT_WORLD: "VRChat World",
     VRCHAT_UNKNOWN: "VRChat 種別不明",
+  };
+  return labels[kind];
+}
+
+function changeKindLabel(kind: WorktreeSnapshot["files"][number]["changeKind"]) {
+  const labels: Record<WorktreeSnapshot["files"][number]["changeKind"], string> = {
+    ADDED: "追加", MODIFIED: "変更", DELETED: "削除", RENAMED: "名前変更", COPIED: "複製", TYPE_CHANGED: "種類変更", UNMERGED: "競合", UNTRACKED: "未管理",
   };
   return labels[kind];
 }

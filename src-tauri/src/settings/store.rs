@@ -99,6 +99,9 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
     );
     store.set("logLevel", json!(settings.log_level));
     store.set("vpmTrackingPolicy", json!(settings.vpm_tracking_policy));
+    store.set("ignoreTemplates", serde_json::to_value(&settings.ignore_templates).map_err(|error| {
+        AppError::with_detail(ErrorCode::SettingsWriteFailed, "設定をシリアライズできませんでした。", "serialize_settings", error.to_string(), false)
+    })?);
     store.save().map_err(|error| {
         AppError::with_detail(
             ErrorCode::SettingsWriteFailed,

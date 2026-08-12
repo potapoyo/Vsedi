@@ -18,6 +18,18 @@ pub enum ErrorCode {
     FilesystemReadFailed,
     FilesystemWriteFailed,
     PermissionDenied,
+    RepositoryInvalid,
+    WorktreeReadFailed,
+    RepositoryStateChanged,
+    RepositoryInitializeFailed,
+    SaveMemoInvalid,
+    SaveNoChanges,
+    SaveConflict,
+    SaveExistingStagedChanges,
+    SaveAddFailed,
+    SaveCommitFailed,
+    HistoryReadFailed,
+    DiffReadFailed,
     InternalError,
 }
 

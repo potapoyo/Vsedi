@@ -1,4 +1,9 @@
 pub mod environment;
+pub mod initialization;
+pub mod history;
+pub mod diff;
 pub mod logging;
 pub mod projects;
 pub mod settings;
+pub mod save;
+pub mod worktree;
