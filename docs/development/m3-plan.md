@@ -4,6 +4,8 @@ Status: In Progress
 
 Replanned: 2026-08-12
 
+Last updated: 2026-08-13
+
 Reference: Issue #18
 
 ## 目的
@@ -32,9 +34,9 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | 層 | 役割 | 現在の状態 |
 | --- | --- | --- |
 | 通常CI | typecheck、frontend build、Rust test、Clippy、生成型整合性 | 利用可能 |
-| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | 手動workflowあり。新UI用ケース更新が必要 |
+| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | 現行UI向け4ケースをローカルで成功。Windows / macOS workflowの実行記録が未完了 |
 | Native UI test | WebView、Rust IPC、native windowを通る自動確認 | Windowsでsession作成に失敗し調査中断。macOSは未追加 |
-| 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOSは旧UI時点で確認済み。Windowsと新UI再確認が必要 |
+| 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOS現行UIの`.app`は合格、DMG確認が未完了。Windowsは再ビルドとexe起動まで成功、GUI操作が未完了 |
 
 ## 現在地
 
@@ -48,12 +50,29 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
 | 画面分割 | 完了 | ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定 |
 | 管理Project・タグ・検索 | 実装済み | schema 6 migration、最終更新順、複数タグ設定・タグ絞り込み・名前/path/tag検索を実装済み |
-| stale Project管理 | 実装済み・未実機確認 | 場所の再指定、一覧からの削除、重複登録防止を実装 |
-| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5からschema 6へ引き継ぎ、診断・初期化で実効値を使用 |
-| ignore template・差分適用 | 実装済み・未実機確認 | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
-| UI smoke更新 | 未着手 | 画面分割・管理Project・タグ・検索をテストケースへ反映する |
-| Windows native検証 | 中断中 | WebDriver session作成問題を解消後に再開する |
-| macOS最終native検証 | 未完了 | 旧UIの保存導線・DMGは確認済み。現行UIで再確認する |
+| stale Project管理 | 実装済み・配布物での再確認待ち | 場所の再指定、一覧からの削除、重複登録防止を実装 |
+| repository固有設定 | 実装済み・配布物での詳細操作確認待ち | VPM overrideをsettings schema 5からschema 6へ引き継ぎ、診断・初期化で実効値を使用 |
+| ignore template・差分適用 | 実装済み・配布物での詳細操作確認待ち | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
+| UI smoke更新 | 完了（ローカル） | 現行UIの4ケース、タグ・検索・設定・保存履歴をテストケースへ反映済み。workflow実行は未記録 |
+| Windows native検証 | CI中断・手動GUI未完了 | WebDriverの`DevToolsActivePort file doesn't exist`とComputer Use helperの`EPERM`を別問題として記録 |
+| macOS最終native検証 | `.app`合格・DMG未完了 | 現行UIの`.app`で中心導線を確認済み。現行UI DMGの生成・インストールが残る |
+
+## 他PC向け引き継ぎ時点の残タスク
+
+最新の引き継ぎ基準は、リモートブランチ`codex/m3-local-save`の`839360a`（Windows GUI smoke test build result）とする。作業開始時は次で同期する。
+
+```sh
+git pull --ff-only origin codex/m3-local-save
+```
+
+優先順は次のとおり。
+
+1. **Windows配布物GUI smoke** — 再生成したMSI / NSISの少なくとも一方（可能なら両方）をインストールし、環境診断、Project追加、初期化preview、現在の作業の保存、履歴・diff、タグ・設定、再起動後の復元を確認する。Computer Use helperの`EPERM`を解消できない場合は、Windows上の手動操作で代替し、スクリーンショットとログを記録する。
+2. **macOS現行UI DMG** — `bundle_dmg.sh`のエラーを解消または切り分け、現行UIのDMG生成・マウント・起動を確認する。`.app`の現行UI smokeは合格済み。
+3. **Playwright workflowの実行記録** — `workflow_dispatch`でWindowsとApple Silicon macOSを実行し、現行UIの4ケースとartifactを確認する。失敗しても通常CIの必須checkにはしない。
+4. **M3完了判定と文書更新** — 両OSの配布物で`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。
+
+Windows native UI CIのWebDriver調査は、配布物の手動GUI smokeとは独立した保留工程である。未検証項目を成功扱いせず、手動結果で補完できる範囲とCI固有の未解決問題を分けて記録する。
 
 ## 対象範囲
 
@@ -96,18 +115,18 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 
 ## 残工程
 
-### Phase A — 現在の製品差分を確定する
+### Phase A — 現在の製品差分を確定する（実装・ローカル検証済み）
 
-- 管理Project一覧、最終更新順、タグ編集・解除・絞り込み・検索をreviewする
-- schema 1〜5からschema 6へのmigrationと、単一カテゴリからタグへの変換、破損・未来schemaの拒否を再確認する
-- stale pathの表示と、タグ操作時のエラー表示を確認する
-- 通常CI相当の検証を行い、この機能を単独のcommitとして確定する
+- 管理Project一覧、最終更新順、タグ編集・解除・絞り込み・検索を実装・review済み
+- schema 1〜5からschema 6へのmigrationと、単一カテゴリからタグへの変換、破損・未来schemaの拒否を実装・テスト済み
+- stale pathの表示、再指定、削除、重複登録防止を実装済み。配布物での詳細操作確認は残る
+- 通常CI相当のRust test、Clippy、typecheck、production build、生成型差分チェックを複数回成功済み
 
 完了条件: 既存設定を失わずに全Projectを一覧でき、タグが再起動後も保持される。
 
-### Phase B — 設定画面の未完部分を実装する
+### Phase B — 設定画面とignore安全性を確認する
 
-VPM tracking policyのrepository override、schema migration、ignore template編集・差分適用は実装済み。Mac実機確認は端末ロック中のため未実施とし、ローカル自動検証で先行確認する。
+VPM tracking policyのrepository override、schema migration、ignore template編集・差分適用は実装済み。Mac現行UIで設定画面の表示は確認済みだが、Windows配布物を含む詳細操作の再確認が残っている。
 
 - repository固有のVPM追跡方針を「全体設定に従う / 除外する / 含める」で保存する
 - 実効値と、全体既定値・repository overrideのどちらが採用されたかを表示する
@@ -117,19 +136,19 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: 全体設定とrepository設定の責務がUIと保存形式の両方で一致し、設定画面を開いただけではrepositoryを変更しない。
 
-### Phase C — UI smoke testを現行画面へ追従させる（CI工程・保留）
+### Phase C — UI smoke testを現行画面へ追従させる（ローカル完了・CI実行待ち）
 
-- `origin/main`のUI test基盤を、未コミット作業を確定した後にM3 branchへ取り込む
-- JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、タグ編集・絞り込み・Project検索へ更新する
-- Rust IPCをmockし、成功・empty・blocking errorを決定的に再現する
+- `origin/main`のUI test基盤をM3 branchへ取り込み済み
+- JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、タグ編集・絞り込み・Project検索へ更新済み
+- Rust IPCをmockし、成功・empty・blocking errorを決定的に再現する4ケースをローカルで成功済み
 - WindowsとApple Silicon macOSのPlaywright手動workflowを実行し、スクリーンショットとtraceをartifactで確認する
 - UI workflowは当面`workflow_dispatch`のみとし、通常CIへは組み込まない
 
 完了条件: 両OSのPlaywright smokeが現行UIの主要navigationと表示を通過する。
 
-### Phase D — 製品機能の回帰検証を完了する
+### Phase D — 製品機能の回帰検証を仕上げる
 
-- 一時repositoryを使うRust統合テストでinit→status→save→history→detailを通す
+- 一時repositoryを使うRust統合テストでinit→status→save→history→detailを通す（基本flowは追加済み。全matrixの記録を仕上げる）
 - project rootと親repositoryの両構成を確認する
 - 空白・日本語path、rename、削除、binary、大量diff、empty repositoryを確認する
 - 設定migration、管理Project順、タグ、Project検索、repository overrideを含める
@@ -152,8 +171,8 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 ### Phase F — 両OSの配布物smokeとInternal Alpha判定
 
-- Apple Silicon macOSで現行UIの`.app` / DMGを起動し、init→save→history→detailを確認する
-- Windowsでnative app / installerを起動し、同じ中心導線を確認する
+- Apple Silicon macOSでは現行UIの`.app`でinit→save→history→detailを確認済み。現行UI DMGの生成・マウント・起動を確認する
+- Windowsでは再ビルド、MSI / NSIS生成、`vsedi.exe`の直接起動まで確認済み。installerのインストールと同じ中心導線を確認する
 - native UI自動化で未検証のOS統合は手動チェックリストで補い、結果を日記へ記録する
 - README、architecture、roadmap、既知制約を実装結果へ更新する
 
