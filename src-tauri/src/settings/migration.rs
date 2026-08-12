@@ -27,6 +27,20 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
                     .expect("default ignore templates serialize"),
             );
         }
+        if schema_version < 4 {
+            if let Some(projects) = object
+                .get_mut("recentProjects")
+                .and_then(Value::as_array_mut)
+            {
+                for project in projects {
+                    if let Some(project) = project.as_object_mut() {
+                        project
+                            .entry("category".to_owned())
+                            .or_insert(Value::Null);
+                    }
+                }
+            }
+        }
         if schema_version < CURRENT_SCHEMA_VERSION {
             object.insert(
                 "schemaVersion".to_owned(),
@@ -53,12 +67,30 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 3);
+        assert_eq!(migrated["schemaVersion"], 4);
         assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
         assert_eq!(
             migrated["ignoreTemplates"]["unityRules"][0],
             "/[Ll]ibrary/*"
         );
         assert_eq!(migrated["recentProjects"][0]["path"], "/project");
+        assert!(migrated["recentProjects"][0]["category"].is_null());
+    }
+
+    #[test]
+    fn schema_three_adds_project_categories() {
+        let migrated = migrate(
+            json!({
+                "schemaVersion": 3,
+                "recentProjects": [{ "path": "/project", "lastOpenedAt": "2026-08-12T00:00:00Z" }],
+                "vpmTrackingPolicy": "EXCLUDE_PACKAGES",
+                "ignoreTemplates": { "unityRules": [], "vpmExcludeRules": [] }
+            }),
+            3,
+        )
+        .expect("migration");
+
+        assert_eq!(migrated["schemaVersion"], 4);
+        assert!(migrated["recentProjects"][0]["category"].is_null());
     }
 }

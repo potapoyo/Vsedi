@@ -84,7 +84,7 @@ function MainWindow() {
     setHistory(entries);
   };
 
-  const selectProject = async (path: string, remember: boolean) => {
+  const selectProject = async (path: string) => {
     if (!settings) return;
     const generation = ++selectionGeneration.current;
     await run("project を開く", async () => {
@@ -92,19 +92,19 @@ function MainWindow() {
       if (generation !== selectionGeneration.current) return;
       clearRepositoryData();
       setProject(result);
-      if (remember) {
-        const nextSettings = {
-          ...settings.settings,
-          recentProjects: [{ path: result.path, lastOpenedAt: new Date().toISOString() }, ...settings.settings.recentProjects.filter((item) => item.path !== result.path)].slice(0, 10),
-        };
-        await saveSettings(nextSettings);
-        if (generation !== selectionGeneration.current) return;
-        setSettings({
-          ...settings,
-          settings: nextSettings,
-          recentProjects: [{ ...nextSettings.recentProjects[0], exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path)].slice(0, 10),
-        });
-      }
+      const existing = settings.settings.recentProjects.find((item) => item.path === result.path);
+      const updatedProject = { path: result.path, lastOpenedAt: new Date().toISOString(), category: existing?.category ?? null };
+      const nextSettings = {
+        ...settings.settings,
+        recentProjects: [updatedProject, ...settings.settings.recentProjects.filter((item) => item.path !== result.path)],
+      };
+      await saveSettings(nextSettings);
+      if (generation !== selectionGeneration.current) return;
+      setSettings({
+        ...settings,
+        settings: nextSettings,
+        recentProjects: [{ ...updatedProject, exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path)],
+      });
       setRoute({ page: "REPOSITORY", section: "WORK" });
       if (result.repository.detected) await reloadRepositoryData(result.path, generation);
     });
@@ -114,7 +114,7 @@ function MainWindow() {
     if (!settings) return;
     try {
       const selected = await open({ directory: true, multiple: false, title: "Vsedi project folder を選択" });
-      if (typeof selected === "string") await selectProject(selected, true);
+      if (typeof selected === "string") await selectProject(selected);
     } catch (caught) {
       setError(normalizeError(caught));
     }
@@ -139,6 +139,26 @@ function MainWindow() {
   const updateLogLevel = async (logLevel: string) => {
     if (!settings || settings.settings.logLevel === logLevel) return;
     await updateSettings({ ...settings.settings, logLevel });
+  };
+
+  const updateProjectCategory = async (path: string, category: string | null) => {
+    if (!settings) return;
+    const normalizedCategory = category?.trim() || null;
+    const updatedAt = new Date().toISOString();
+    const nextSettings = {
+      ...settings.settings,
+      recentProjects: settings.settings.recentProjects.map((item) => item.path === path ? { ...item, category: normalizedCategory, lastOpenedAt: updatedAt } : item),
+    };
+    await run("カテゴリを保存", async () => {
+      await saveSettings(nextSettings);
+      setSettings({
+        ...settings,
+        settings: nextSettings,
+        recentProjects: settings.recentProjects
+          .map((item) => item.path === path ? { ...item, category: normalizedCategory, lastOpenedAt: updatedAt } : item)
+          .sort(compareManagedProjects),
+      });
+    });
   };
 
   const previewInitialization = async () => {
@@ -251,7 +271,8 @@ function MainWindow() {
               settings={settings}
               busy={isBusy}
               onChooseProject={() => void chooseProject()}
-              onOpenRecent={(path) => void selectProject(path, false)}
+              onOpenProject={(path) => void selectProject(path)}
+              onSetCategory={(path, category) => void updateProjectCategory(path, category)}
               onOpenSettings={() => setRoute({ page: "GLOBAL_SETTINGS", section: "ENVIRONMENT" })}
             />
           )}
@@ -360,13 +381,39 @@ function AppHeader({ pageTitle, project, repositoryState, pending, onRefresh }: 
   );
 }
 
-function HomePage({ environment, settings, busy, onChooseProject, onOpenRecent, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenRecent: (path: string) => void; onOpenSettings: () => void }) {
+function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onSetCategory, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void; onOpenSettings: () => void }) {
   const gitAvailable = environment?.git.status === "AVAILABLE";
   return <div className="space-y-6">
     <section className="rounded-3xl bg-slate-900 px-6 py-7 text-white shadow-panel sm:px-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className="mt-3 text-3xl font-bold tracking-tight">管理する project を選択</h3><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p><Button className="mt-5 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button></section>
     {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
-    <section><div className="mb-3 flex items-end justify-between gap-4"><div><h3 className="text-lg font-bold">最近の project</h3><p className="mt-1 text-sm text-slate-500">選択するとrepositoryの作業画面を開きます。</p></div><span className="text-xs text-slate-400">{settings?.recentProjects.length ?? 0} 件</span></div>{settings?.recentProjects.length ? <div className="grid gap-3 md:grid-cols-2">{settings.recentProjects.map((item) => <button key={item.path} type="button" onClick={() => onOpenRecent(item.path)} disabled={busy || !item.exists} className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-panel transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p></div><StatusPill label={item.exists ? "開く" : "再指定"} tone={item.exists ? "good" : "warn"} /></div><p className="mt-4 text-xs text-slate-400">{item.lastOpenedAt ? `最終利用: ${formatDate(item.lastOpenedAt)}` : "利用日時は未記録"}</p></button>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">まだprojectは登録されていません。</p></CardContent></Card>}</section>
+    <ManagedProjectList projects={settings?.recentProjects ?? []} busy={busy} onOpenProject={onOpenProject} onSetCategory={onSetCategory} />
   </div>;
+}
+
+function ManagedProjectList({ projects, busy, onOpenProject, onSetCategory }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void }) {
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const categories = [...new Set(projects.map((item) => item.category).filter((category): category is string => Boolean(category)))].sort((left, right) => left.localeCompare(right, "ja"));
+  const categoryKey = categories.join("\u0000");
+  const sortedProjects = [...projects].sort(compareManagedProjects);
+  const visibleProjects = categoryFilter === "ALL" ? sortedProjects : sortedProjects.filter((item) => item.category === categoryFilter);
+
+  useEffect(() => {
+    if (categoryFilter !== "ALL" && !categories.includes(categoryFilter)) setCategoryFilter("ALL");
+  }, [categoryFilter, categoryKey]);
+
+  const startCategoryEdit = (path: string, category: string | null) => {
+    setEditingPath(path);
+    setCategoryDraft(category ?? "");
+  };
+
+  const saveCategory = (path: string) => {
+    onSetCategory(path, categoryDraft);
+    setEditingPath(null);
+  };
+
+  return <section><div className="mb-3 flex flex-wrap items-end justify-between gap-4"><div><h3 className="text-lg font-bold">管理しているProject</h3><p className="mt-1 text-sm text-slate-500">最終更新が新しい順に表示します。</p></div><div className="flex items-center gap-3"><label className="text-xs font-semibold text-slate-500" htmlFor="project-category-filter">カテゴリ</label><select id="project-category-filter" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="ALL">すべて</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><span className="text-xs text-slate-400">{visibleProjects.length} 件</span></div></div>{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p>{item.category && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{item.category}</span>}{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex gap-2"><Button variant="secondary" onClick={() => startCategoryEdit(item.path, item.category)} disabled={busy}>カテゴリ設定</Button><Button onClick={() => onOpenProject(item.path)} disabled={busy || !item.exists}>開く</Button></div></div>{editingPath === item.path && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><input className="min-w-48 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryDraft} maxLength={40} onChange={(event) => setCategoryDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCategory(item.path); }} placeholder="例: Avatar、World、作業中" autoFocus disabled={busy} /><Button onClick={() => saveCategory(item.path)} disabled={busy}>保存</Button>{item.category && <Button variant="secondary" onClick={() => { onSetCategory(item.path, null); setEditingPath(null); }} disabled={busy}>カテゴリを外す</Button>}<Button variant="ghost" onClick={() => setEditingPath(null)} disabled={busy}>キャンセル</Button></div>}</CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "このカテゴリにProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
 }
 
 function WorkPage({ project, repositoryState, worktree, initializationPreview, saveResult, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onSave, onShowDiff, fileDiff, onGoToRepositorySettings }: {
@@ -424,6 +471,7 @@ function currentWindowLabel() { try { return getCurrentWindow().label; } catch {
 function normalizeError(error: unknown): AppError { if (isAppError(error)) return error; return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false }; }
 function projectName(path: string) { const parts = path.split(/[\\/]/).filter(Boolean); return parts.at(-1) ?? path; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ja-JP"); }
+function compareManagedProjects(left: SettingsLoadResult["recentProjects"][number], right: SettingsLoadResult["recentProjects"][number]) { return (right.lastOpenedAt ?? "").localeCompare(left.lastOpenedAt ?? "") || left.path.localeCompare(right.path, "ja"); }
 function projectStatusLabel(status: ProjectDiagnostic["status"]) { return status === "MANAGEABLE" ? "管理可能" : status === "NEEDS_ATTENTION" ? "要確認" : "非 Unity"; }
 function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) { const labels: Record<ProjectDiagnostic["projectKind"], string> = { UNITY: "Unity project", VRCHAT_AVATAR: "VRChat Avatar", VRCHAT_WORLD: "VRChat World", VRCHAT_UNKNOWN: "VRChat 種別不明" }; return labels[kind]; }
 function changeKindLabel(kind: WorktreeSnapshot["files"][number]["changeKind"]) { const labels: Record<WorktreeSnapshot["files"][number]["changeKind"], string> = { ADDED: "追加", MODIFIED: "変更", DELETED: "削除", RENAMED: "名前変更", COPIED: "複製", TYPE_CHANGED: "種類変更", UNMERGED: "競合", UNTRACKED: "未管理" }; return labels[kind]; }

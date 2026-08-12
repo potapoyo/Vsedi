@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 pub const DEFAULT_UNITY_IGNORE_RULES: &[&str] = &[
     "/[Ll]ibrary/*",
@@ -135,6 +135,8 @@ impl Default for IgnoreTemplateSettings {
 pub struct RecentProject {
     pub path: String,
     pub last_opened_at: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
@@ -142,6 +144,7 @@ pub struct RecentProject {
 pub struct RecentProjectStatus {
     pub path: String,
     pub last_opened_at: Option<String>,
+    pub category: Option<String>,
     pub exists: bool,
 }
 

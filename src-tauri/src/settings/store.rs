@@ -60,15 +60,17 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
         )
     })?;
 
-    let recent_projects = settings
+    let mut recent_projects = settings
         .recent_projects
         .iter()
         .map(|project| RecentProjectStatus {
             path: project.path.clone(),
             last_opened_at: project.last_opened_at.clone(),
+            category: project.category.clone(),
             exists: Path::new(&project.path).is_dir(),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    sort_recent_projects(&mut recent_projects);
     Ok(SettingsLoadResult {
         settings,
         recovered,
@@ -77,7 +79,7 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
     })
 }
 
-pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
+pub fn save(app: &AppHandle, mut settings: AppSettings) -> AppResult<()> {
     if settings.schema_version != CURRENT_SCHEMA_VERSION {
         return Err(AppError::simple(
             ErrorCode::SettingsUnsupportedSchema,
@@ -92,6 +94,13 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             "validate_settings_before_save",
         )
     })?;
+    for project in &mut settings.recent_projects {
+        project.category = project
+            .category
+            .take()
+            .map(|category| category.trim().to_owned())
+            .filter(|category| !category.is_empty());
+    }
 
     let store = app.store("settings.json").map_err(|error| {
         AppError::with_detail(
@@ -145,6 +154,15 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
         log_level, "settings saved through Tauri Store"
     );
     Ok(())
+}
+
+fn sort_recent_projects(projects: &mut [RecentProjectStatus]) {
+    projects.sort_by(|left, right| {
+        right
+            .last_opened_at
+            .cmp(&left.last_opened_at)
+            .then_with(|| left.path.cmp(&right.path))
+    });
 }
 
 fn load_file(path: &Path) -> AppResult<(AppSettings, bool, Option<String>)> {
@@ -277,7 +295,7 @@ fn timestamp() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::{backup_before_recovery, load_file};
+    use super::{backup_before_recovery, load_file, sort_recent_projects};
     use crate::errors::ErrorCode;
     use crate::models::CURRENT_SCHEMA_VERSION;
     use std::{
@@ -352,5 +370,37 @@ mod tests {
         let backup = backup_before_recovery(&path).unwrap();
         assert_ne!(backup, path);
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn managed_projects_are_sorted_by_latest_activity() {
+        use crate::models::RecentProjectStatus;
+
+        let mut projects = vec![
+            RecentProjectStatus {
+                path: "/older".to_owned(),
+                last_opened_at: Some("2026-08-11T00:00:00Z".to_owned()),
+                category: None,
+                exists: true,
+            },
+            RecentProjectStatus {
+                path: "/newer".to_owned(),
+                last_opened_at: Some("2026-08-12T00:00:00Z".to_owned()),
+                category: Some("Avatar".to_owned()),
+                exists: true,
+            },
+            RecentProjectStatus {
+                path: "/unknown".to_owned(),
+                last_opened_at: None,
+                category: None,
+                exists: false,
+            },
+        ];
+
+        sort_recent_projects(&mut projects);
+
+        assert_eq!(projects[0].path, "/newer");
+        assert_eq!(projects[1].path, "/older");
+        assert_eq!(projects[2].path, "/unknown");
     }
 }

@@ -88,8 +88,9 @@ repository が選択されていない間は、左側の「現在の作業」「
 ホームは対象を選ぶための入口に限定し、詳細な保存操作や設定編集を置かない。
 
 - 「project を追加」ボタン
-- 最近使った project のカード
+- 管理している project の一覧。件数上限を設けず、最終更新が新しい順に表示
 - 各カードに project 名、種別、Unity version、最終利用日時、folder の存在状態を表示
+- project ごとの自由入力カテゴリと、カテゴリによる一覧の絞り込み
 - repository に未保存変更や要確認状態がある場合は短い badge だけ表示
 - System Git 未検出など、全 repository に影響する問題がある場合は上部に案内を表示
 - stale path は削除せず、「場所を再指定」と「一覧から削除」を提供する
@@ -170,7 +171,7 @@ template の変更は既存 repository に自動適用しない。既存 reposit
 
 | 現在の要素 | 移動先 | 理由 |
 | --- | --- | --- |
-| folder 選択、最近の project | ホーム | repository を開く入口 |
+| folder 選択、管理Project一覧 | ホーム | repository を開く入口 |
 | OS / System Git の詳細 | 全体設定 > 実行環境 | 全 repository 共通 |
 | System Git の重大な問題 | ホームの要約 | repository を開く前に行動が必要 |
 | Unity / VRChat 診断要約 | 現在の作業 | 保存可否の判断に必要 |
@@ -211,6 +212,9 @@ AppSettings
 ├─ schemaVersion
 ├─ onboardingCompleted
 ├─ recentProjects[]
+│  ├─ path
+│  ├─ lastOpenedAt                  # 開く・カテゴリ変更で更新する管理上の最終更新日時
+│  └─ category?                     # アプリ内の一覧分類。repositoryには書き込まない
 ├─ logLevel                         # アプリ全体
 ├─ vpmTrackingPolicy               # 全体の既定値
 ├─ ignoreTemplates                 # 新規 repository の既定値

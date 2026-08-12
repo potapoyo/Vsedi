@@ -66,9 +66,9 @@ export type FileDiffKind = "TEXT" | "BINARY" | "UNAVAILABLE";
 
 export type FileDiff = { path: string, kind: FileDiffKind, patch: string | null, truncated: boolean, truncationReason: string | null, };
 
-export type RecentProject = { path: string, lastOpenedAt: string | null, };
+export type RecentProject = { path: string, lastOpenedAt: string | null, category: string | null, };
 
-export type RecentProjectStatus = { path: string, lastOpenedAt: string | null, exists: boolean, };
+export type RecentProjectStatus = { path: string, lastOpenedAt: string | null, category: string | null, exists: boolean, };
 
 export type VpmTrackingPolicy = "EXCLUDE_PACKAGES" | "INCLUDE_PACKAGES";
 
