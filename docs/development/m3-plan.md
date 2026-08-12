@@ -117,7 +117,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: 全体設定とrepository設定の責務がUIと保存形式の両方で一致し、設定画面を開いただけではrepositoryを変更しない。
 
-### Phase C — UI smoke testを現行画面へ追従させる
+### Phase C — UI smoke testを現行画面へ追従させる（CI工程・保留）
 
 - `origin/main`のUI test基盤を、未コミット作業を確定した後にM3 branchへ取り込む
 - JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、カテゴリ絞り込みへ更新する
@@ -137,7 +137,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: M3の状態変更と設定migrationに既知のデータ損失経路がなく、通常CIが成功する。
 
-### Phase E — Native UI CIを再開する
+### Phase E — Native UI CIを再開する（CI工程・保留）
 
 製品実装と通常CIを止めず、手動workflow内で調査する。
 
@@ -184,13 +184,15 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 - macOSとWindowsの配布物でinit→save→history→detailのnative smokeに合格する
 - native UI CIが未安定の場合、その事実を既知制約として残し、手動native smokeでInternal Alpha判定を補完する
 
-## 実行順序
+## CIを除外した実行順序
 
 1. Phase A: 管理Project・カテゴリ差分を確定
 2. Phase B: repository固有設定を完成
-3. Phase C: UI test基盤を取り込み、現行画面へ追従
-4. Phase D: M3全体の自動回帰検証
-5. Phase E: Windows native UI CIの中断点から再開
-6. Phase F: 両OSの配布物smokeとInternal Alpha判定
+3. Phase D: 製品機能のローカル回帰検証を完成
+4. Phase F: Macのロック解除後に現行UIの配布物smokeを実施
+5. Windowsが利用可能になった段階で配布物smokeを実施
+6. README、Diary、既知制約を更新してInternal Alpha判定
+
+Phase C（Playwright）とPhase E（native UI CI）はこの作業列から除外し、製品実装・ローカル検証・手動配布物確認が完了した後に別工程として再開する。
 
 Windows native CIの調査はPhase A〜Dを妨げない。driver調査が長期化した場合も、製品実装・通常CI・Playwright・手動native smokeの結果を個別に記録し、未確認項目を成功扱いしない。
