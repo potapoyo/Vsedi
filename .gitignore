@@ -3,6 +3,7 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+wdio-results/
 src-tauri/target/
 .DS_Store
 *.log
