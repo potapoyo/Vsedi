@@ -97,6 +97,8 @@
 
 目的: 最初に実用になる Vsedi を作る。
 
+詳細な実装順序と安全条件は [`m3-plan.md`](m3-plan.md) を参照する。
+
 タスク:
 
 - Git repository initialization

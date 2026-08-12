@@ -22,7 +22,7 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の基盤とM2のproject診断を実装中です。Rust 側の command boundary、Git環境診断、Unity / VRChat / VPM診断、設定保全、構造化ログ、生成型、最小 UI を含みます。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md) を参照してください。
+Tauri v2 / React の基盤とM2のproject診断が完了し、M3のローカル保存へ着手する段階です。M3ではGit repository初期化、変更確認、作業保存、履歴・commit詳細を実装します。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md) を参照してください。
 
 ## ドキュメント
 
