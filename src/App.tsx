@@ -454,7 +454,7 @@ function HomePage({ environment, settings, busy, onChooseProject, onOpenProject,
   return <div className="space-y-6">
     <section className="rounded-3xl bg-slate-900 px-6 py-7 text-white shadow-panel sm:px-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className="mt-3 text-3xl font-bold tracking-tight">管理する project を選択</h3><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p><Button className="mt-5 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button></section>
     {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
-    <ManagedProjectList projects={settings?.recentProjects ?? []} busy={busy} onOpenProject={onOpenProject} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} onSetCategory={onSetCategory} />
+    {settings ? <ManagedProjectList projects={settings.recentProjects} busy={busy} onOpenProject={onOpenProject} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} onSetCategory={onSetCategory} /> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">管理Projectを読み込んでいます…</p></CardContent></Card>}
   </div>;
 }
 

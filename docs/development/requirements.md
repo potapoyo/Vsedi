@@ -43,6 +43,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - Git version を表示できる
 - `.gitignore` の状態を診断できる
 - VPM packageをGit管理から除外するか含めるかを設定できる
+- repositoryごとにVPM package追跡方針を上書きし、実効値の由来を確認できる
 - 選択したVPM追跡方針からの明らかな逸脱を警告できる
 - Git repository rootがUnity project外にある状態を正常な構成として情報表示できる
 - project 設定ファイルを読み取れない場合に警告し、読み取れる範囲の診断を継続できる
