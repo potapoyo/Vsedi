@@ -35,6 +35,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - 管理している project を最終更新順で一覧できる
 - project ごとに複数のアプリ内タグを設定し、タグで一覧を絞り込める
 - Project名、project path、タグを対象に管理Projectを検索できる
+- 管理Project一覧で、Avatarは人物アイコン、Worldは地球儀アイコンを表示し、マウスオーバーで種別を確認できる
 - project folder を Finder / Explorer で開ける
 - Unity で開く導線を提供できる
 

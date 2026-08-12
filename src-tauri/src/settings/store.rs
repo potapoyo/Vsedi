@@ -8,6 +8,7 @@ use crate::{
     },
     platform::paths::app_data_dir,
     platform::process::find_executable,
+    services::projects,
     settings::migration::migrate,
 };
 use serde_json::{json, Value};
@@ -68,11 +69,23 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
     let mut recent_projects = settings
         .recent_projects
         .iter()
-        .map(|project| RecentProjectStatus {
-            path: project.path.clone(),
-            last_opened_at: project.last_opened_at.clone(),
-            tags: project.tags.clone(),
-            exists: Path::new(&project.path).is_dir(),
+        .map(|project| {
+            let exists = Path::new(&project.path).is_dir();
+            let project_kind = if exists {
+                let policy = resolve_vpm_tracking_policy_for_project(&settings, &project.path);
+                projects::inspect_project(&project.path, policy)
+                    .ok()
+                    .map(|diagnostic| diagnostic.project_kind)
+            } else {
+                None
+            };
+            RecentProjectStatus {
+                path: project.path.clone(),
+                last_opened_at: project.last_opened_at.clone(),
+                tags: project.tags.clone(),
+                exists,
+                project_kind,
+            }
         })
         .collect::<Vec<_>>();
     sort_recent_projects(&mut recent_projects);
@@ -497,18 +510,21 @@ mod tests {
                 last_opened_at: Some("2026-08-11T00:00:00Z".to_owned()),
                 tags: Vec::new(),
                 exists: true,
+                project_kind: None,
             },
             RecentProjectStatus {
                 path: "/newer".to_owned(),
                 last_opened_at: Some("2026-08-12T00:00:00Z".to_owned()),
                 tags: vec!["Avatar".to_owned()],
                 exists: true,
+                project_kind: None,
             },
             RecentProjectStatus {
                 path: "/unknown".to_owned(),
                 last_opened_at: None,
                 tags: Vec::new(),
                 exists: false,
+                project_kind: None,
             },
         ];
 

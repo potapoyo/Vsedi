@@ -146,6 +146,7 @@ pub struct RecentProjectStatus {
     pub last_opened_at: Option<String>,
     pub tags: Vec<String>,
     pub exists: bool,
+    pub project_kind: Option<crate::models::diagnostics::ProjectKind>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]

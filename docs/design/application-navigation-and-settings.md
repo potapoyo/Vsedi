@@ -91,6 +91,7 @@ repository が選択されていない間は、左側の「現在の作業」「
 - 「project を追加」ボタン
 - 管理している project の一覧。件数上限を設けず、最終更新が新しい順に表示
 - 各カードに project 名、種別、Unity version、最終利用日時、folder の存在状態を表示
+- project folder 名の前に種別アイコンを表示し、Avatarは人物、Worldは地球儀としてツールチップでも種別を示す
 - project ごとの複数タグと、タグによる一覧の絞り込み
 - project 名、path、タグを対象にした管理Project検索
 - repository に未保存変更や要確認状態がある場合は短い badge だけ表示
