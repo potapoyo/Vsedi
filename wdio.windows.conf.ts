@@ -1,15 +1,23 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import type { TauriCapabilities } from "@wdio/tauri-service";
 
 const resultsDirectory = resolve("wdio-results");
+const applicationPath = resolve("src-tauri/target/release/vsedi.exe");
+const capabilities: TauriCapabilities[] = [{
+  browserName: "tauri",
+  "tauri:options": {
+    application: applicationPath,
+  },
+}];
 
 export const config: WebdriverIO.Config = {
   runner: "local",
   specs: ["./native-tests/specs/**/*.e2e.ts"],
   maxInstances: 1,
-  capabilities: [{ browserName: "tauri" }],
+  capabilities,
   services: [["@wdio/tauri-service", {
-    appBinaryPath: resolve("src-tauri/target/release/vsedi.exe"),
+    appBinaryPath: applicationPath,
     driverProvider: "external",
     autoInstallTauriDriver: true,
     autoDownloadEdgeDriver: true,
