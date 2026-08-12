@@ -100,14 +100,7 @@ pub fn save(app: &AppHandle, mut settings: AppSettings) -> AppResult<()> {
         )
     })?;
     for project in &mut settings.recent_projects {
-        let mut normalized_tags = Vec::with_capacity(project.tags.len());
-        for tag in project.tags.drain(..) {
-            let tag = tag.trim();
-            if !tag.is_empty() && !normalized_tags.iter().any(|existing| existing == tag) {
-                normalized_tags.push(tag.to_owned());
-            }
-        }
-        project.tags = normalized_tags;
+        project.tags = normalize_project_tags(std::mem::take(&mut project.tags));
     }
     normalize_repository_settings(&mut settings.repository_settings);
 
@@ -262,6 +255,26 @@ fn sort_recent_projects(projects: &mut [RecentProjectStatus]) {
     });
 }
 
+fn normalize_project_tags(tags: Vec<String>) -> Vec<String> {
+    const MAX_TAGS: usize = 20;
+    const MAX_TAG_LENGTH: usize = 80;
+    let mut normalized = Vec::with_capacity(tags.len().min(MAX_TAGS));
+    for tag in tags {
+        let tag = tag.trim();
+        if tag.is_empty() {
+            continue;
+        }
+        let tag = tag.chars().take(MAX_TAG_LENGTH).collect::<String>();
+        if !normalized.iter().any(|existing| existing == &tag) {
+            normalized.push(tag);
+        }
+        if normalized.len() == MAX_TAGS {
+            break;
+        }
+    }
+    normalized
+}
+
 fn load_file(path: &Path) -> AppResult<(AppSettings, bool, Option<String>)> {
     if !path.exists() {
         let settings = AppSettings::default();
@@ -393,7 +406,8 @@ fn timestamp() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::{
-        backup_before_recovery, load_file, resolve_vpm_tracking_policy, sort_recent_projects,
+        backup_before_recovery, load_file, normalize_project_tags, resolve_vpm_tracking_policy,
+        sort_recent_projects,
     };
     use crate::errors::ErrorCode;
     use crate::models::{
@@ -503,6 +517,20 @@ mod tests {
         assert_eq!(projects[0].path, "/newer");
         assert_eq!(projects[1].path, "/older");
         assert_eq!(projects[2].path, "/unknown");
+    }
+
+    #[test]
+    fn project_tags_are_trimmed_deduplicated_and_bounded() {
+        let tags = normalize_project_tags(vec![
+            " Avatar ".to_owned(),
+            "Avatar".to_owned(),
+            "".to_owned(),
+            "x".repeat(100),
+        ]);
+
+        assert_eq!(tags[0], "Avatar");
+        assert_eq!(tags[1].chars().count(), 80);
+        assert_eq!(tags.len(), 2);
     }
 
     #[test]

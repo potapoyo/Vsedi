@@ -86,7 +86,7 @@ function MainWindow() {
     setHistory(entries);
   };
 
-  const selectProject = async (path: string, replacedPath?: string) => {
+  const selectProject = async (path: string, replacedPath?: string, targetSection: RepositorySection = "WORK") => {
     if (!settings) return;
     const generation = ++selectionGeneration.current;
     await run("project を開く", async () => {
@@ -96,7 +96,7 @@ function MainWindow() {
       setProject(result);
       const existing = settings.settings.recentProjects.find((item) => item.path === result.path)
         ?? settings.settings.recentProjects.find((item) => item.path === replacedPath);
-      const updatedProject = { path: result.path, lastOpenedAt: new Date().toISOString(), category: existing?.category ?? null };
+      const updatedProject = { path: result.path, lastOpenedAt: new Date().toISOString(), tags: existing?.tags ?? [] };
       const nextSettings = {
         ...settings.settings,
         recentProjects: [updatedProject, ...settings.settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
@@ -108,7 +108,7 @@ function MainWindow() {
         settings: nextSettings,
         recentProjects: [{ ...updatedProject, exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
       });
-      setRoute({ page: "REPOSITORY", section: "WORK" });
+      setRoute({ page: "REPOSITORY", section: targetSection });
       if (result.repository.detected) await reloadRepositoryData(result.path, generation);
     });
   };
@@ -184,21 +184,21 @@ function MainWindow() {
     await updateSettings({ ...settings.settings, ignoreTemplates });
   };
 
-  const updateProjectCategory = async (path: string, category: string | null) => {
+  const updateProjectTags = async (path: string, tags: string[]) => {
     if (!settings) return;
-    const normalizedCategory = category?.trim() || null;
+    const normalizedTags = normalizeTags(tags);
     const updatedAt = new Date().toISOString();
     const nextSettings = {
       ...settings.settings,
-      recentProjects: settings.settings.recentProjects.map((item) => item.path === path ? { ...item, category: normalizedCategory, lastOpenedAt: updatedAt } : item),
+      recentProjects: settings.settings.recentProjects.map((item) => item.path === path ? { ...item, tags: normalizedTags, lastOpenedAt: updatedAt } : item),
     };
-    await run("カテゴリを保存", async () => {
+    await run("タグを保存", async () => {
       await saveSettings(nextSettings);
       setSettings({
         ...settings,
         settings: nextSettings,
         recentProjects: settings.recentProjects
-          .map((item) => item.path === path ? { ...item, category: normalizedCategory, lastOpenedAt: updatedAt } : item)
+          .map((item) => item.path === path ? { ...item, tags: normalizedTags, lastOpenedAt: updatedAt } : item)
           .sort(compareManagedProjects),
       });
     });
@@ -333,9 +333,9 @@ function MainWindow() {
               busy={isBusy}
               onChooseProject={() => void chooseProject()}
               onOpenProject={(path) => void selectProject(path)}
+              onOpenRepositorySettings={(path) => void selectProject(path, undefined, "SETTINGS")}
               onReassignProject={(path) => void reassignManagedProject(path)}
               onRemoveProject={(path) => void removeManagedProject(path)}
-              onSetCategory={(path, category) => void updateProjectCategory(path, category)}
               onOpenSettings={() => setRoute({ page: "GLOBAL_SETTINGS", section: "ENVIRONMENT" })}
             />
           )}
@@ -395,6 +395,7 @@ function MainWindow() {
               onApplyInitialization={() => void applyInitialization()}
               onCancelInitialization={() => setInitializationPreview(null)}
               onOpenGlobalDefaults={() => setRoute({ page: "GLOBAL_SETTINGS", section: "DEFAULTS" })}
+              onUpdateTags={(tags) => void updateProjectTags(project.path, tags)}
               onUpdateVpm={(policy) => void updateRepositoryVpmTrackingPolicy(policy)}
               ignorePreview={ignorePreview}
               onPreviewIgnore={() => void previewIgnore()}
@@ -449,39 +450,42 @@ function AppHeader({ pageTitle, project, repositoryState, pending, onRefresh }: 
   );
 }
 
-function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onReassignProject, onRemoveProject, onSetCategory, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void; onOpenSettings: () => void }) {
+function GearIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M10.3 2.8h3.4l.5 2.1c.5.2 1 .4 1.5.8l2-.8 1.7 3-1.6 1.4c.1.5.1 1.1 0 1.7l1.6 1.4-1.7 3-2-.8c-.5.3-1 .6-1.5.8l-.5 2.1h-3.4l-.5-2.1a7 7 0 0 1-1.5-.8l-2 .8-1.7-3 1.6-1.4a7 7 0 0 1 0-1.7L4.6 7.9l1.7-3 2 .8c.5-.3 1-.6 1.5-.8l.5-2.1Z" /><circle cx="12" cy="10.2" r="2.6" /></svg>;
+}
+
+function HomePage({ environment, settings, busy, onChooseProject, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChooseProject: () => void; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onOpenSettings: () => void }) {
   const gitAvailable = environment?.git.status === "AVAILABLE";
   return <div className="space-y-6">
     <section className="rounded-3xl bg-slate-900 px-6 py-7 text-white shadow-panel sm:px-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className="mt-3 text-3xl font-bold tracking-tight">管理する project を選択</h3><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p><Button className="mt-5 bg-white text-slate-900 hover:bg-slate-100" onClick={onChooseProject} disabled={busy}>project を追加</Button></section>
     {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
-    {settings ? <ManagedProjectList projects={settings.recentProjects} busy={busy} onOpenProject={onOpenProject} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} onSetCategory={onSetCategory} /> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">管理Projectを読み込んでいます…</p></CardContent></Card>}
+    {settings ? <ManagedProjectList projects={settings.recentProjects} busy={busy} onOpenProject={onOpenProject} onOpenRepositorySettings={onOpenRepositorySettings} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} /> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">管理Projectを読み込んでいます…</p></CardContent></Card>}
   </div>;
 }
 
-function ManagedProjectList({ projects, busy, onOpenProject, onReassignProject, onRemoveProject, onSetCategory }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onSetCategory: (path: string, category: string | null) => void }) {
-  const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [editingPath, setEditingPath] = useState<string | null>(null);
-  const [categoryDraft, setCategoryDraft] = useState("");
-  const categories = [...new Set(projects.map((item) => item.category).filter((category): category is string => Boolean(category)))].sort((left, right) => left.localeCompare(right, "ja"));
-  const categoryKey = categories.join("\u0000");
+function ManagedProjectList({ projects, busy, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const tags = [...new Set(projects.flatMap((item) => item.tags))].sort((left, right) => left.localeCompare(right, "ja"));
+  const tagKey = tags.join("\u0000");
   const sortedProjects = [...projects].sort(compareManagedProjects);
-  const visibleProjects = categoryFilter === "ALL" ? sortedProjects : sortedProjects.filter((item) => item.category === categoryFilter);
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ja-JP");
+  const visibleProjects = sortedProjects.filter((item) => {
+    const haystack = [projectName(item.path), item.path, ...item.tags].join("\n").toLocaleLowerCase("ja-JP");
+    const matchesSearch = !normalizedQuery || haystack.includes(normalizedQuery);
+    const matchesTags = selectedTags.length === 0 || selectedTags.some((tag) => item.tags.includes(tag));
+    return matchesSearch && matchesTags;
+  });
 
   useEffect(() => {
-    if (categoryFilter !== "ALL" && !categories.includes(categoryFilter)) setCategoryFilter("ALL");
-  }, [categoryFilter, categoryKey]);
+    setSelectedTags((current) => current.filter((tag) => tags.includes(tag)));
+  }, [tagKey]);
 
-  const startCategoryEdit = (path: string, category: string | null) => {
-    setEditingPath(path);
-    setCategoryDraft(category ?? "");
+  const toggleTag = (tag: string) => {
+    setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
   };
 
-  const saveCategory = (path: string) => {
-    onSetCategory(path, categoryDraft);
-    setEditingPath(null);
-  };
-
-  return <section><div className="mb-3 flex flex-wrap items-end justify-between gap-4"><div><h3 className="text-lg font-bold">管理しているProject</h3><p className="mt-1 text-sm text-slate-500">最終更新が新しい順に表示します。</p></div><div className="flex items-center gap-3"><label className="text-xs font-semibold text-slate-500" htmlFor="project-category-filter">カテゴリ</label><select id="project-category-filter" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="ALL">すべて</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><span className="text-xs text-slate-400">{visibleProjects.length} 件</span></div></div>{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p>{item.category && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{item.category}</span>}{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" onClick={() => startCategoryEdit(item.path, item.category)} disabled={busy}>カテゴリ設定</Button>{item.exists ? <Button onClick={() => onOpenProject(item.path)} disabled={busy}>開く</Button> : <Button onClick={() => onReassignProject(item.path)} disabled={busy}>場所を再指定</Button>}<Button variant="ghost" onClick={() => onRemoveProject(item.path)} disabled={busy}>一覧から削除</Button></div></div>{editingPath === item.path && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><input className="min-w-48 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryDraft} maxLength={40} onChange={(event) => setCategoryDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCategory(item.path); }} placeholder="例: Avatar、World、作業中" autoFocus disabled={busy} /><Button onClick={() => saveCategory(item.path)} disabled={busy}>保存</Button>{item.category && <Button variant="secondary" onClick={() => { onSetCategory(item.path, null); setEditingPath(null); }} disabled={busy}>カテゴリを外す</Button>}<Button variant="ghost" onClick={() => setEditingPath(null)} disabled={busy}>キャンセル</Button></div>}</CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "このカテゴリにProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
+  return <section><div className="mb-3 flex flex-wrap items-end justify-between gap-4"><div><h3 className="text-lg font-bold">管理しているProject</h3><p className="mt-1 text-sm text-slate-500">最終更新が新しい順に表示します。名前・パス・タグで検索できます。</p></div><span className="text-xs text-slate-400">{visibleProjects.length} / {projects.length} 件</span></div><div className="mb-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4"><label className="block text-xs font-semibold text-slate-500" htmlFor="project-search">Projectを検索</label><input id="project-search" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Project名、パス、タグを入力" disabled={busy} />{tags.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-500">タグ</span>{tags.map((tag) => <button type="button" key={tag} onClick={() => toggleTag(tag)} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${selectedTags.includes(tag) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`} aria-pressed={selectedTags.includes(tag)}>{tag}</button>)}{selectedTags.length > 0 && <button type="button" className="ml-1 text-xs font-semibold text-slate-500 underline" onClick={() => setSelectedTags([])}>タグ絞り込みを解除</button>}</div>}</div>{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p><ProjectTagBadges tags={item.tags} />{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex flex-wrap justify-end gap-2">{item.exists && <Button variant="secondary" className="h-10 w-10 p-0" onClick={() => onOpenRepositorySettings(item.path)} disabled={busy} aria-label={`${projectName(item.path)}のリポジトリ設定を開く`} title="リポジトリ設定を開く"><GearIcon /></Button>}{item.exists ? <Button onClick={() => onOpenProject(item.path)} disabled={busy}>開く</Button> : <Button onClick={() => onReassignProject(item.path)} disabled={busy}>場所を再指定</Button>}<Button variant="ghost" onClick={() => onRemoveProject(item.path)} disabled={busy}>一覧から削除</Button></div></div></CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "検索条件に一致するProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
 }
 
 function WorkPage({ project, repositoryState, worktree, initializationPreview, saveResult, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onSave, onShowDiff, fileDiff, onGoToRepositorySettings }: {
@@ -512,7 +516,27 @@ function HistoryPage({ history, commitDetail, fileDiff, busy, onSelectCommit, on
   return <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"><Card><CardHeader><h3 className="font-semibold">保存履歴</h3><p className="mt-1 text-xs text-slate-500">過去の保存を選ぶと、変更内容を確認できます。</p></CardHeader><CardContent>{history.length ? <div className="space-y-2">{history.map((entry) => <button type="button" key={entry.commitId} onClick={() => onSelectCommit(entry)} disabled={busy} className={`w-full rounded-xl px-3 py-3 text-left transition ${commitDetail?.commitId === entry.commitId ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}><p className="truncate text-sm font-semibold">{entry.memo}</p><p className={`mt-1 text-xs ${commitDetail?.commitId === entry.commitId ? "text-slate-300" : "text-slate-500"}`}>{entry.shortCommitId} · {entry.authorTime}</p></button>)}</div> : <p className="py-6 text-center text-sm text-slate-500">まだ保存履歴はありません。</p>}</CardContent></Card><div className="space-y-5">{commitDetail ? <Card><CardHeader><h3 className="font-semibold">保存の詳細</h3></CardHeader><CardContent><p className="text-lg font-semibold">{commitDetail.memo}</p><p className="mt-1 break-all text-xs text-slate-500">{commitDetail.commitId} · {commitDetail.authorTime}</p><div className="mt-5 space-y-2">{commitDetail.files.map((file) => <button type="button" onClick={() => onShowDiff(file.path)} disabled={busy} key={`${file.path}-${file.oldPath ?? ""}`} className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"><span className="min-w-0 truncate">{file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{changeKindLabel(file.changeKind)}</span></button>)}</div><p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">安全な復元はM4でこの画面から開始します。履歴を選択しただけでは現在の作業は変わりません。</p></CardContent></Card> : <Card><CardContent><p className="py-8 text-center text-sm text-slate-500">左から保存を選択してください。</p></CardContent></Card>}{fileDiff && <DiffPanel diff={fileDiff} />}</div></div>;
 }
 
-function RepositorySettingsPage({ project, settings, initializationPreview, ignorePreview, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onOpenGlobalDefaults, onUpdateVpm, onPreviewIgnore, onApplyIgnore }: { project: ProjectDiagnostic; settings: SettingsLoadResult | null; initializationPreview: RepositoryInitializationPreview | null; ignorePreview: RepositoryIgnorePreview | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onOpenGlobalDefaults: () => void; onUpdateVpm: (policy: VpmTrackingPolicy | null) => void; onPreviewIgnore: () => void; onApplyIgnore: () => void }) {
+function ProjectTagEditor({ tags, busy, onSave }: { tags: string[]; busy: boolean; onSave: (tags: string[]) => void }) {
+  const [draftTags, setDraftTags] = useState<string[]>(tags);
+  const [input, setInput] = useState("");
+  const tagKey = tags.join("\u0000");
+
+  useEffect(() => {
+    setDraftTags(tags);
+    setInput("");
+  }, [tagKey]);
+
+  const addInputTags = () => {
+    const additions = parseTags(input);
+    if (!additions.length) return;
+    setDraftTags((current) => normalizeTags([...current, ...additions]));
+    setInput("");
+  };
+
+  return <div><p className="text-sm font-semibold">Projectタグ</p><p className="mt-1 text-sm text-slate-600">複数のタグを設定できます。タグはアプリ内の管理Project検索・絞り込みに使用します。</p><div className="mt-4 flex flex-wrap gap-2">{draftTags.length ? draftTags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">{tag}<button type="button" className="rounded-full px-1 text-sky-700 hover:bg-sky-100" onClick={() => setDraftTags((current) => current.filter((item) => item !== tag))} disabled={busy} aria-label={`${tag}タグを削除`}>×</button></span>) : <span className="text-sm text-slate-500">タグはまだ設定されていません。</span>}</div><div className="mt-4 flex flex-wrap gap-2"><input className="min-w-56 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" value={input} maxLength={80} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addInputTags(); } }} placeholder="例: Avatar、作業中" disabled={busy} /><Button variant="secondary" onClick={addInputTags} disabled={busy || !input.trim()}>タグを追加</Button></div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => onSave(draftTags)} disabled={busy}>タグを保存</Button><Button variant="secondary" onClick={() => setDraftTags([])} disabled={busy || !draftTags.length}>すべて解除</Button></div></div>;
+}
+
+function RepositorySettingsPage({ project, settings, initializationPreview, ignorePreview, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onOpenGlobalDefaults, onUpdateTags, onUpdateVpm, onPreviewIgnore, onApplyIgnore }: { project: ProjectDiagnostic; settings: SettingsLoadResult | null; initializationPreview: RepositoryInitializationPreview | null; ignorePreview: RepositoryIgnorePreview | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onOpenGlobalDefaults: () => void; onUpdateTags: (tags: string[]) => void; onUpdateVpm: (policy: VpmTrackingPolicy | null) => void; onPreviewIgnore: () => void; onApplyIgnore: () => void }) {
   const repositoryRoot = project.repository.root;
   const override = repositoryRoot
     ? settings?.settings.repositorySettings.find((item) => item.repositoryRoot === repositoryRoot)?.vpmTrackingPolicyOverride ?? null
@@ -520,7 +544,8 @@ function RepositorySettingsPage({ project, settings, initializationPreview, igno
   const effectivePolicy = override ?? settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES";
   const effectiveLabel = effectivePolicy === "INCLUDE_PACKAGES" ? "含める" : "除外する";
   const hasMissingRules = ignorePreview?.ignoreFiles.some((file) => file.missingRules.length > 0) ?? false;
-  return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">このrepositoryの設定</h3><p className="mt-1 text-xs text-slate-500">設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent className="space-y-5"><div className="rounded-xl bg-slate-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">実効値: {effectiveLabel}（{override ? "repository固有の設定" : "全体設定の既定値"}）</p></div><StatusPill label={effectiveLabel} tone="neutral" /></div>{repositoryRoot ? <div className="mt-4 flex flex-wrap gap-2"><Button variant={override === null ? "primary" : "secondary"} onClick={() => onUpdateVpm(null)} disabled={busy}>全体設定に従う</Button><Button variant={override === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={override === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div> : <p className="mt-4 text-sm text-slate-600">repositoryが未作成のため、全体設定の既定値を使用します。</p>}<Button className="mt-3" variant="ghost" onClick={onOpenGlobalDefaults}>全体の既定値を開く</Button></div><div className="grid gap-3 md:grid-cols-2"><DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} /><DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} /></div></CardContent></Card><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">ignore rule</h3><p className="mt-1 text-xs text-slate-500">不足しているruleだけを確認して追加します。既存ruleは削除しません。</p></div><Button variant="secondary" onClick={onPreviewIgnore} disabled={busy || !project.repository.detected}>不足ruleを確認</Button></div></CardHeader><CardContent>{ignorePreview ? <div className="space-y-3">{ignorePreview.ignoreFiles.map((file) => <div key={file.path} className="rounded-xl bg-slate-50 px-4 py-3"><p className="text-sm font-semibold">{file.path}{file.willCreate ? "（新規作成）" : ""}</p>{file.missingRules.length ? <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{file.missingRules.join("\n")}</p> : <p className="mt-1 text-xs text-slate-500">不足ruleはありません。</p>}</div>)}{ignorePreview.blockingReason && <BlockingNotice tone="danger">{ignorePreview.blockingReason}</BlockingNotice>}{ignorePreview.canApply && hasMissingRules && <Button onClick={onApplyIgnore} disabled={busy}>この内容を適用</Button>}{ignorePreview.canApply && !hasMissingRules && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">現在のtemplateとの差分はありません。</p>}</div> : <p className="text-sm text-slate-600">確認すると、現在のtemplateとrepositoryのignore ruleとの差分を表示します。</p>}</CardContent></Card><Card><CardHeader><h3 className="font-semibold">project情報</h3></CardHeader><CardContent><dl className="grid gap-x-6 gap-y-4 text-sm md:grid-cols-2"><Definition label="project folder" value={project.path} /><Definition label="種別" value={projectKindLabel(project.projectKind)} /><Definition label="Unity" value={project.unityVersion ? `Unity ${project.unityVersion}` : "不明"} /><Definition label="repository" value={project.repository.detected ? "検出済み" : "未作成"} /></dl></CardContent></Card>{project.isUnityProject && !project.repository.detected && <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} />}</div>;
+  const managedProject = settings?.settings.recentProjects.find((item) => item.path === project.path);
+  return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">このProjectの設定</h3><p className="mt-1 text-xs text-slate-500">タグやrepository設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent><ProjectTagEditor tags={managedProject?.tags ?? []} busy={busy} onSave={onUpdateTags} /></CardContent></Card><Card><CardHeader><h3 className="font-semibold">このrepositoryの設定</h3><p className="mt-1 text-xs text-slate-500">設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent className="space-y-5"><div className="rounded-xl bg-slate-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">実効値: {effectiveLabel}（{override ? "repository固有の設定" : "全体設定の既定値"}）</p></div><StatusPill label={effectiveLabel} tone="neutral" /></div>{repositoryRoot ? <div className="mt-4 flex flex-wrap gap-2"><Button variant={override === null ? "primary" : "secondary"} onClick={() => onUpdateVpm(null)} disabled={busy}>全体設定に従う</Button><Button variant={override === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={override === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div> : <p className="mt-4 text-sm text-slate-600">repositoryが未作成のため、全体設定の既定値を使用します。</p>}<Button className="mt-3" variant="ghost" onClick={onOpenGlobalDefaults}>全体の既定値を開く</Button></div><div className="grid gap-3 md:grid-cols-2"><DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} /><DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} /></div></CardContent></Card><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">ignore rule</h3><p className="mt-1 text-xs text-slate-500">不足しているruleだけを確認して追加します。既存ruleは削除しません。</p></div><Button variant="secondary" onClick={onPreviewIgnore} disabled={busy || !project.repository.detected}>不足ruleを確認</Button></div></CardHeader><CardContent>{ignorePreview ? <div className="space-y-3">{ignorePreview.ignoreFiles.map((file) => <div key={file.path} className="rounded-xl bg-slate-50 px-4 py-3"><p className="text-sm font-semibold">{file.path}{file.willCreate ? "（新規作成）" : ""}</p>{file.missingRules.length ? <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{file.missingRules.join("\n")}</p> : <p className="mt-1 text-xs text-slate-500">不足ruleはありません。</p>}</div>)}{ignorePreview.blockingReason && <BlockingNotice tone="danger">{ignorePreview.blockingReason}</BlockingNotice>}{ignorePreview.canApply && hasMissingRules && <Button onClick={onApplyIgnore} disabled={busy}>この内容を適用</Button>}{ignorePreview.canApply && !hasMissingRules && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">現在のtemplateとの差分はありません。</p>}</div> : <p className="text-sm text-slate-600">確認すると、現在のtemplateとrepositoryのignore ruleとの差分を表示します。</p>}</CardContent></Card><Card><CardHeader><h3 className="font-semibold">project情報</h3></CardHeader><CardContent><dl className="grid gap-x-6 gap-y-4 text-sm md:grid-cols-2"><Definition label="project folder" value={project.path} /><Definition label="種別" value={projectKindLabel(project.projectKind)} /><Definition label="Unity" value={project.unityVersion ? `Unity ${project.unityVersion}` : "不明"} /><Definition label="repository" value={project.repository.detected ? "検出済み" : "未作成"} /></dl></CardContent></Card>{project.isUnityProject && !project.repository.detected && <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} />}</div>;
 }
 
 function GlobalSettingsPage({ section, environment, settings, busy, onChangeSection, onUpdateVpm, onUpdateIgnoreTemplates, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { section: GlobalSettingsSection; environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChangeSection: (section: GlobalSettingsSection) => void; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateIgnoreTemplates: (templates: IgnoreTemplateSettings) => void; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) {
@@ -556,6 +581,9 @@ function currentWindowLabel() { try { return getCurrentWindow().label; } catch {
 function normalizeError(error: unknown): AppError { if (isAppError(error)) return error; return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false }; }
 function projectName(path: string) { const parts = path.split(/[\\/]/).filter(Boolean); return parts.at(-1) ?? path; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ja-JP"); }
+function ProjectTagBadges({ tags }: { tags: string[] }) { return tags.length ? <div className="flex flex-wrap gap-1">{tags.map((tag) => <span key={tag} className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{tag}</span>)}</div> : null; }
+function parseTags(value: string) { return normalizeTags(value.split(/[\n,、]/)); }
+function normalizeTags(tags: string[]) { return tags.map((tag) => tag.trim()).filter(Boolean).filter((tag, index, values) => values.indexOf(tag) === index).slice(0, 20); }
 function parseTemplateText(value: string) { const lines = value.replace(/\r\n/g, "\n").split("\n"); return lines.at(-1) === "" ? lines.slice(0, -1) : lines; }
 function compareManagedProjects(left: SettingsLoadResult["recentProjects"][number], right: SettingsLoadResult["recentProjects"][number]) { return (right.lastOpenedAt ?? "").localeCompare(left.lastOpenedAt ?? "") || left.path.localeCompare(right.path, "ja"); }
 function projectStatusLabel(status: ProjectDiagnostic["status"]) { return status === "MANAGEABLE" ? "管理可能" : status === "NEEDS_ATTENTION" ? "要確認" : "非 Unity"; }

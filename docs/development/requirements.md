@@ -33,7 +33,8 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - Avatar SDK と Worlds SDK が同居する project は非対応エラーとして停止できる
 - Git repository の有無を検出できる
 - 管理している project を最終更新順で一覧できる
-- project ごとにアプリ内カテゴリを設定し、一覧を絞り込める
+- project ごとに複数のアプリ内タグを設定し、タグで一覧を絞り込める
+- Project名、project path、タグを対象に管理Projectを検索できる
 - project folder を Finder / Explorer で開ける
 - Unity で開く導線を提供できる
 
@@ -107,7 +108,7 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 - 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
 - 初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する
 - `settings.json` は Explorer / Finder 等から通常のファイルとしてコピーできること
-- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、projectカテゴリ追加後のschemaは `4`、repository固有設定追加後の現行schemaは `5` とする
+- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、単一カテゴリ追加後は `4`、repository固有設定追加後は `5`、複数タグ移行後の現行schemaは `6` とする
 - 対応する `settings.json` を所定のアプリデータ領域へ手動配置した場合、Vsedi が通常の設定ファイルとして読み込めること
 - 古い schema は可能な範囲で migration し、未対応 schema や破損 JSON を黙って上書きしないこと
 - 手動復元された設定内の旧 PC の path が存在しない場合は、クラッシュせず再選択・再登録を促すこと

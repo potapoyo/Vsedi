@@ -23,7 +23,8 @@ UI 上では Git の用語だけを主語にせず、「現在の作業」「作
 Vsedi
 ├─ ホーム
 │  ├─ project / repository を追加
-│  ├─ 登録済み project 一覧
+│  ├─ 登録済み project 一覧、名前・path・タグ検索
+│  ├─ タグによる一覧絞り込み
 │  └─ 実行環境に問題がある場合だけ要約を表示
 ├─ 選択中 repository
 │  ├─ 現在の作業
@@ -90,7 +91,8 @@ repository が選択されていない間は、左側の「現在の作業」「
 - 「project を追加」ボタン
 - 管理している project の一覧。件数上限を設けず、最終更新が新しい順に表示
 - 各カードに project 名、種別、Unity version、最終利用日時、folder の存在状態を表示
-- project ごとの自由入力カテゴリと、カテゴリによる一覧の絞り込み
+- project ごとの複数タグと、タグによる一覧の絞り込み
+- project 名、path、タグを対象にした管理Project検索
 - repository に未保存変更や要確認状態がある場合は短い badge だけ表示
 - System Git 未検出など、全 repository に影響する問題がある場合は上部に案内を表示
 - stale path は削除せず、「場所を再指定」と「一覧から削除」を提供する
@@ -203,9 +205,9 @@ repository override がない → 全体の既定値を使用
 全体の既定値も読み取れない → schema の安全な既定値を使用
 ```
 
-### 推奨する次期 schema
+### 現行 schema
 
-既存の `recentProjects`、`logLevel`、`vpmTrackingPolicy`、`ignoreTemplates` は維持し、最初の移行では `repositorySettings` を追加する。大規模な rename は画面分割と同時に行わない。
+既存の `recentProjects`、`logLevel`、`vpmTrackingPolicy`、`ignoreTemplates` は維持する。`recentProjects[].category` はschema 6で`tags[]`へ移行し、repository固有設定も同じschemaで保持する。
 
 ```text
 AppSettings
@@ -213,8 +215,8 @@ AppSettings
 ├─ onboardingCompleted
 ├─ recentProjects[]
 │  ├─ path
-│  ├─ lastOpenedAt                  # 開く・カテゴリ変更で更新する管理上の最終更新日時
-│  └─ category?                     # アプリ内の一覧分類。repositoryには書き込まない
+│  ├─ lastOpenedAt                  # 開く・タグ変更で更新する管理上の最終更新日時
+│  └─ tags[]                        # アプリ内の一覧タグ。repositoryには書き込まない
 ├─ logLevel                         # アプリ全体
 ├─ vpmTrackingPolicy               # 全体の既定値
 ├─ ignoreTemplates                 # 新規 repository の既定値

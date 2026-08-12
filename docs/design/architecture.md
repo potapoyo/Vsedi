@@ -194,7 +194,7 @@ symlink、junction、nested repository、worktree は、対応済みとして扱
 例:
 
 - onboarding 完了状態
-- 管理対象の project path、最終更新日時、アプリ内カテゴリ
+- 管理対象の project path、最終更新日時、アプリ内タグ
 - secret ではない UI 設定
 - window state
 
@@ -214,7 +214,7 @@ PC 初期化・買い替え後の再構成に利用できる、バージョン�
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4ではprojectごとのアプリ内カテゴリ、schema 5ではrepositoryごとのVPM追跡方針overrideを追加する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
+`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4の単一カテゴリはschema 6で複数タグへ移行し、repositoryごとのVPM追跡方針overrideもschema 6で保持する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
 
 ## Rust / TypeScript 型境界
 

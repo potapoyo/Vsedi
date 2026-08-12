@@ -47,11 +47,11 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | 保存履歴・commit詳細 | 完了 | text / binary / unavailable / truncatedを区別する |
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
 | 画面分割 | 完了 | ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定 |
-| 管理Project・カテゴリ | 実装済み | schema 4 migration、最終更新順、カテゴリ設定・絞り込みを実装済み |
+| 管理Project・タグ・検索 | 実装済み | schema 6 migration、最終更新順、複数タグ設定・タグ絞り込み・名前/path/tag検索を実装済み |
 | stale Project管理 | 実装済み・未実機確認 | 場所の再指定、一覧からの削除、重複登録防止を実装 |
-| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5へ保存し、診断・初期化で実効値を使用 |
+| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5からschema 6へ引き継ぎ、診断・初期化で実効値を使用 |
 | ignore template・差分適用 | 実装済み・未実機確認 | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
-| UI smoke更新 | 未着手 | 画面分割・管理Project・カテゴリをテストケースへ反映する |
+| UI smoke更新 | 未着手 | 画面分割・管理Project・タグ・検索をテストケースへ反映する |
 | Windows native検証 | 中断中 | WebDriver session作成問題を解消後に再開する |
 | macOS最終native検証 | 未完了 | 旧UIの保存導線・DMGは確認済み。現行UIで再確認する |
 
@@ -64,7 +64,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 - repository全体の変更状態とfile diffの読み取り
 - 保存メモ、`add`、`commit`、保存直前の再検証
 - commit履歴、commit詳細、変更file、表示可能なdiff
-- 管理Project一覧、最終更新順、カテゴリ設定と絞り込み
+- 管理Project一覧、最終更新順、複数タグ設定・タグ絞り込み・Project検索
 - ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定の分離
 - 全体のVPM既定値とrepository固有override
 - Rustの正本型からTypeScript bindingを生成する仕組み
@@ -98,12 +98,12 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 
 ### Phase A — 現在の製品差分を確定する
 
-- 管理Project一覧、最終更新順、カテゴリ編集・解除・絞り込みをreviewする
-- schema 1〜3からschema 4へのmigrationと、破損・未来schemaの拒否を再確認する
-- stale pathの表示と、カテゴリ操作時のエラー表示を確認する
+- 管理Project一覧、最終更新順、タグ編集・解除・絞り込み・検索をreviewする
+- schema 1〜5からschema 6へのmigrationと、単一カテゴリからタグへの変換、破損・未来schemaの拒否を再確認する
+- stale pathの表示と、タグ操作時のエラー表示を確認する
 - 通常CI相当の検証を行い、この機能を単独のcommitとして確定する
 
-完了条件: 既存設定を失わずに全Projectを一覧でき、カテゴリが再起動後も保持される。
+完了条件: 既存設定を失わずに全Projectを一覧でき、タグが再起動後も保持される。
 
 ### Phase B — 設定画面の未完部分を実装する
 
@@ -120,7 +120,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 ### Phase C — UI smoke testを現行画面へ追従させる（CI工程・保留）
 
 - `origin/main`のUI test基盤を、未コミット作業を確定した後にM3 branchへ取り込む
-- JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、カテゴリ絞り込みへ更新する
+- JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、タグ編集・絞り込み・Project検索へ更新する
 - Rust IPCをmockし、成功・empty・blocking errorを決定的に再現する
 - WindowsとApple Silicon macOSのPlaywright手動workflowを実行し、スクリーンショットとtraceをartifactで確認する
 - UI workflowは当面`workflow_dispatch`のみとし、通常CIへは組み込まない
@@ -132,7 +132,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 - 一時repositoryを使うRust統合テストでinit→status→save→history→detailを通す
 - project rootと親repositoryの両構成を確認する
 - 空白・日本語path、rename、削除、binary、大量diff、empty repositoryを確認する
-- 設定migration、管理Project順、カテゴリ、repository overrideを含める
+- 設定migration、管理Project順、タグ、Project検索、repository overrideを含める
 - typecheck、production build、Rust test、Clippy、生成型差分チェックを成功させる
 
 完了条件: M3の状態変更と設定migrationに既知のデータ損失経路がなく、通常CIが成功する。
@@ -168,8 +168,8 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 | ignore | fileなし、既存ruleあり、不足rule、CRLF / LF、末尾改行なし、読取不能、編集済みtemplate |
 | save | 初回commit、通常commit、変更なし、空memo、状態変化、既存staged、conflict、add失敗、commit失敗 |
 | history | 初回commit、複数commit、rename、削除、merge commit、binary、履歴なし |
-| settings | schema 1〜5、未来schema、破損JSON、カテゴリ、全体既定値、repository override、stale path |
-| UI | loading、empty、blocking error、成功、再読込、二重click、長いpath / memo、カテゴリ絞り込み |
+| settings | schema 1〜6、未来schema、破損JSON、タグ、全体既定値、repository override、stale path |
+| UI | loading、empty、blocking error、成功、再読込、二重click、長いpath / memo、タグ絞り込み、Project検索 |
 | platform | Playwright Windows / macOS、Apple Silicon `.app` / DMG、Windows native app / installer |
 
 ## M3完了条件
@@ -179,14 +179,14 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 - 保存前に対象変更が表示され、表示後に状態が変わった場合はcommitしない
 - 失敗時にworktreeを自動で巻き戻さず、変更可能性と次の行動を説明できる
 - 保存成功後にcommit IDと時刻が表示され、同じcommitを履歴と詳細画面から確認できる
-- 管理Project、カテゴリ、全体設定、repository設定が再起動後も安全に復元される
+- 管理Project、タグ、全体設定、repository設定が再起動後も安全に復元される
 - Windows / macOSのPlaywright smokeが現行画面で成功する
 - macOSとWindowsの配布物でinit→save→history→detailのnative smokeに合格する
 - native UI CIが未安定の場合、その事実を既知制約として残し、手動native smokeでInternal Alpha判定を補完する
 
 ## CIを除外した実行順序
 
-1. Phase A: 管理Project・カテゴリ差分を確定
+1. Phase A: 管理Project・タグ・検索差分を確定
 2. Phase B: repository固有設定を完成
 3. Phase D: 製品機能のローカル回帰検証を完成
 4. Phase F: Macのロック解除後に現行UIの配布物smokeを実施

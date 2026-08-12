@@ -105,7 +105,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_three_adds_project_categories() {
+    fn schema_three_adds_project_tags() {
         let migrated = migrate(
             json!({
                 "schemaVersion": 3,
