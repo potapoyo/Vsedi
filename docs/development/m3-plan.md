@@ -168,7 +168,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 | ignore | fileなし、既存ruleあり、不足rule、CRLF / LF、末尾改行なし、読取不能、編集済みtemplate |
 | save | 初回commit、通常commit、変更なし、空memo、状態変化、既存staged、conflict、add失敗、commit失敗 |
 | history | 初回commit、複数commit、rename、削除、merge commit、binary、履歴なし |
-| settings | schema 1〜4、未来schema、破損JSON、カテゴリ、全体既定値、repository override、stale path |
+| settings | schema 1〜5、未来schema、破損JSON、カテゴリ、全体既定値、repository override、stale path |
 | UI | loading、empty、blocking error、成功、再読込、二重click、長いpath / memo、カテゴリ絞り込み |
 | platform | Playwright Windows / macOS、Apple Silicon `.app` / DMG、Windows native app / installer |
 

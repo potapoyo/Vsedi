@@ -283,6 +283,65 @@ mod tests {
     }
 
     #[test]
+    fn initialization_save_history_and_detail_form_one_safe_flow() {
+        let root = std::env::temp_dir().join(format!(
+            "vsedi-m3-flow-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("Packages")).unwrap();
+        let templates = crate::models::IgnoreTemplateSettings {
+            unity_rules: vec!["Library/".to_owned()],
+            vpm_exclude_rules: vec!["com.vrchat.*".to_owned()],
+        };
+        let preview = crate::services::initialization::preview(
+            root.to_str().unwrap(),
+            crate::models::VpmTrackingPolicy::ExcludePackages,
+            &templates,
+        )
+        .unwrap();
+        crate::services::initialization::initialize(
+            root.to_str().unwrap(),
+            &preview.status_token,
+            crate::models::VpmTrackingPolicy::ExcludePackages,
+            &templates,
+        )
+        .unwrap();
+        git(&root, &["config", "user.name", "Vsedi test"]);
+        git(&root, &["config", "user.email", "test@example.invalid"]);
+        fs::write(root.join("scene.txt"), "saved through M3\n").unwrap();
+
+        let snapshot = worktree::read_worktree_snapshot(root.to_str().unwrap()).unwrap();
+        let result = save(SaveRequest {
+            project_path: root.to_string_lossy().into_owned(),
+            status_token: snapshot.status_token,
+            memo: "M3 flow".to_owned(),
+        })
+        .unwrap();
+        let history = crate::services::history::read_history(root.to_str().unwrap()).unwrap();
+        let detail =
+            crate::services::history::read_commit_detail(root.to_str().unwrap(), &result.commit_id)
+                .unwrap();
+
+        assert_eq!(
+            history.first().map(|entry| entry.commit_id.as_str()),
+            Some(result.commit_id.as_str())
+        );
+        assert_eq!(
+            history.first().map(|entry| entry.memo.as_str()),
+            Some("M3 flow")
+        );
+        assert!(detail.files.iter().any(|file| file.path == "scene.txt"));
+        assert!(worktree::read_worktree_snapshot(root.to_str().unwrap())
+            .unwrap()
+            .files
+            .is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn refuses_existing_staged_changes_without_mutating_head() {
         let root = std::env::temp_dir().join(format!(
             "vsedi-save-staged-{}",
