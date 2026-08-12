@@ -11,6 +11,8 @@ import type {
   ProjectDiagnostic,
   RepositoryState,
   RepositoryInitializationPreview,
+  RepositoryIgnorePreview,
+  ApplyIgnoreRulesRequest,
   SettingsLoadResult,
   SaveRequest,
   SaveResult,
@@ -39,6 +41,14 @@ export function previewRepositoryInitialization(projectPath: string) {
 
 export function initializeRepository(request: InitializeRepositoryRequest) {
   return invoke<void>("initialize_repository", { request });
+}
+
+export function previewIgnoreRules(projectPath: string) {
+  return invoke<RepositoryIgnorePreview>("preview_ignore_rules", { projectPath });
+}
+
+export function applyIgnoreRules(request: ApplyIgnoreRulesRequest) {
+  return invoke<void>("apply_ignore_rules", { request });
 }
 
 export function saveWorktree(request: SaveRequest) {

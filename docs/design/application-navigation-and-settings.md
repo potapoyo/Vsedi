@@ -300,7 +300,7 @@ page は配置とデータ取得の調停を担当し、保存、履歴、設定
 - VPM tracking policyの全体既定値とrepository overrideを実装済み
 - 診断、初期化preview、初期化実行が同じ実効設定をRust側で解決
 - リポジトリ設定画面に実効値・設定由来・override操作を追加
-- リポジトリ設定にignore診断とpreview導線を残し、次のPhaseで差分編集を追加
+- 全体設定にignore template editor、リポジトリ設定に不足ruleのpreview・明示適用を追加
 
 ### Phase 3 — 操作品質
 

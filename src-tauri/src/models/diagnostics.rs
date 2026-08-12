@@ -204,6 +204,23 @@ pub struct RepositoryInitializationPreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RepositoryIgnorePreview {
+    pub status_token: String,
+    pub repository_root: String,
+    pub can_apply: bool,
+    pub blocking_reason: Option<String>,
+    pub ignore_files: Vec<IgnoreFilePreview>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyIgnoreRulesRequest {
+    pub project_path: String,
+    pub status_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeRepositoryRequest {
     pub project_path: String,
     pub status_token: String,

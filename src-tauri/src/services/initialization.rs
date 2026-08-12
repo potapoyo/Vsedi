@@ -2,8 +2,8 @@ use crate::{
     errors::{AppError, AppResult, ErrorCode},
     git::{command::run_git, diagnostics},
     models::{
-        IgnoreFilePreview, IgnoreTemplateSettings, RepositoryInitializationPreview,
-        VpmTrackingPolicy,
+        ApplyIgnoreRulesRequest, IgnoreFilePreview, IgnoreTemplateSettings,
+        RepositoryIgnorePreview, RepositoryInitializationPreview, VpmTrackingPolicy,
     },
     platform::process::find_executable,
 };
@@ -123,6 +123,91 @@ pub fn initialize(
         })?;
     }
     info!(operation = "initialize_repository", project_path = %project.display(), "repository initialization completed");
+    Ok(())
+}
+
+pub fn preview_ignore_rules(
+    project_path: &str,
+    policy: VpmTrackingPolicy,
+    templates: &IgnoreTemplateSettings,
+) -> AppResult<RepositoryIgnorePreview> {
+    debug!(operation = "preview_ignore_rules", project_path = %project_path, "ignore rule preview started");
+    let project = canonical_project(project_path)?;
+    let Some(git) = find_executable("git") else {
+        return Err(AppError::simple(
+            ErrorCode::RepositoryInvalid,
+            "System Git が見つかりません。",
+            "preview_ignore_rules",
+        ));
+    };
+    let repository_probe = diagnostics::repository_root(&git, &project).ok_or_else(|| {
+        AppError::simple(
+            ErrorCode::WorktreeReadFailed,
+            "Git repository の状態を読み取れませんでした。",
+            "preview_ignore_rules",
+        )
+    })?;
+    let ignore_files = ignore_previews(&project, policy, templates)?;
+    let token = initialization_token(&project, policy, templates, &ignore_files)?;
+    let repository_root = repository_probe
+        .as_deref()
+        .map(PathBuf::from)
+        .and_then(|path| path.canonicalize().ok())
+        .unwrap_or_else(|| project.clone());
+    let preview = RepositoryIgnorePreview {
+        status_token: token,
+        repository_root: repository_root.to_string_lossy().into_owned(),
+        can_apply: repository_probe.is_some(),
+        blocking_reason: repository_probe
+            .is_none()
+            .then(|| "Git repositoryがないため、適用できません。".to_owned()),
+        ignore_files,
+    };
+    info!(
+        operation = "preview_ignore_rules",
+        can_apply = preview.can_apply,
+        ignore_file_count = preview.ignore_files.len(),
+        "ignore rule preview completed"
+    );
+    Ok(preview)
+}
+
+pub fn apply_ignore_rules(
+    request: ApplyIgnoreRulesRequest,
+    policy: VpmTrackingPolicy,
+    templates: &IgnoreTemplateSettings,
+) -> AppResult<()> {
+    let preview = preview_ignore_rules(&request.project_path, policy, templates)?;
+    if !preview.can_apply {
+        return Err(AppError::simple(
+            ErrorCode::RepositoryInvalid,
+            "Git repositoryがないため、ignore ruleを適用できません。",
+            "apply_ignore_rules",
+        ));
+    }
+    if preview.status_token != request.status_token {
+        return Err(AppError::simple(
+            ErrorCode::RepositoryStateChanged,
+            "ignore ruleのpreview後にprojectまたはtemplateが変わりました。内容を確認してから、もう一度実行してください。",
+            "apply_ignore_rules",
+        ));
+    }
+    let project = canonical_project(&request.project_path)?;
+    for file in &preview.ignore_files {
+        if file.missing_rules.is_empty() {
+            continue;
+        }
+        append_rules(&project.join(&file.path), &file.missing_rules).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::IgnoreRulesApplyFailed,
+                "ignore ruleを適用できませんでした。",
+                "apply_ignore_rules",
+                error.to_string(),
+                true,
+            )
+        })?;
+    }
+    info!(operation = "apply_ignore_rules", project_path = %project.display(), "ignore rules applied");
     Ok(())
 }
 
@@ -328,6 +413,104 @@ mod tests {
 
         assert!(!preview.can_initialize);
         assert!(preview.blocking_reason.is_some());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn applies_only_missing_ignore_rules_to_existing_repository() {
+        let root = std::env::temp_dir().join(format!(
+            "vsedi-ignore-apply-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("Packages")).unwrap();
+        fs::write(root.join(".gitignore"), "custom-rule\r\n").unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .status()
+            .unwrap()
+            .success()
+            .then_some(())
+            .expect("git init");
+        let templates = IgnoreTemplateSettings {
+            unity_rules: vec!["/[Ll]ibrary/*".to_owned()],
+            vpm_exclude_rules: vec!["com.vrchat.*".to_owned()],
+        };
+        let preview = preview_ignore_rules(
+            root.to_str().unwrap(),
+            VpmTrackingPolicy::ExcludePackages,
+            &templates,
+        )
+        .unwrap();
+        assert!(preview.can_apply);
+        assert!(preview
+            .ignore_files
+            .iter()
+            .any(|file| file.path == ".gitignore" && file.missing_rules == vec!["/[Ll]ibrary/*"]));
+
+        apply_ignore_rules(
+            ApplyIgnoreRulesRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                status_token: preview.status_token,
+            },
+            VpmTrackingPolicy::ExcludePackages,
+            &templates,
+        )
+        .unwrap();
+        let root_ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
+        let packages_ignore = fs::read_to_string(root.join("Packages/.gitignore")).unwrap();
+        assert!(root_ignore.starts_with("custom-rule\r\n"));
+        assert!(root_ignore.contains("/[Ll]ibrary/*\r\n"));
+        assert!(packages_ignore.contains("com.vrchat.*\n"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ignore_apply_refuses_a_stale_preview() {
+        let root = std::env::temp_dir().join(format!(
+            "vsedi-ignore-stale-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .status()
+            .unwrap()
+            .success()
+            .then_some(())
+            .expect("git init");
+        let templates = IgnoreTemplateSettings {
+            unity_rules: vec!["Library/".to_owned()],
+            vpm_exclude_rules: Vec::new(),
+        };
+        let preview = preview_ignore_rules(
+            root.to_str().unwrap(),
+            VpmTrackingPolicy::IncludePackages,
+            &templates,
+        )
+        .unwrap();
+        fs::write(root.join(".gitignore"), "changed\n").unwrap();
+        let error = apply_ignore_rules(
+            ApplyIgnoreRulesRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                status_token: preview.status_token,
+            },
+            VpmTrackingPolicy::IncludePackages,
+            &templates,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::RepositoryStateChanged);
+        assert_eq!(
+            fs::read_to_string(root.join(".gitignore")).unwrap(),
+            "changed\n"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

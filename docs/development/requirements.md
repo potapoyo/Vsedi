@@ -51,6 +51,8 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 
 - 未初期化 project で Git repository を作成できる
 - Unity / VRChat 向け ignore rule を提案できる
+- 新規repository向けのUnity / VPM ignore templateを設定画面から編集できる
+- 既存repositoryの不足ignore ruleを確認し、既存内容を削除せず追加できる
 - 既存 `.gitignore` を無断で置換しない
 - 必要な変更を preview してから適用できる
 

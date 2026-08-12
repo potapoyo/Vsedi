@@ -24,6 +24,8 @@ pub fn run() {
             commands::projects::inspect_project,
             commands::initialization::preview_repository_initialization,
             commands::initialization::initialize_repository,
+            commands::initialization::preview_ignore_rules,
+            commands::initialization::apply_ignore_rules,
             commands::save::save_worktree,
             commands::history::read_history,
             commands::history::read_commit_detail,

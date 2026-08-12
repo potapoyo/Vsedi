@@ -23,6 +23,7 @@ pub enum ErrorCode {
     WorktreeReadFailed,
     RepositoryStateChanged,
     RepositoryInitializeFailed,
+    IgnoreRulesApplyFailed,
     SaveMemoInvalid,
     SaveNoChanges,
     SaveConflict,

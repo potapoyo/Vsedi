@@ -48,7 +48,8 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
 | 画面分割 | 完了 | ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定 |
 | 管理Project・カテゴリ | 実装済み・未確定 | schema 4 migrationを含む未コミット差分。自動検証34件は成功済み |
-| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5へ保存し、診断・初期化で実効値を使用。ignore適用導線は残工程 |
+| repository固有設定 | 実装済み・未実機確認 | VPM overrideをsettings schema 5へ保存し、診断・初期化で実効値を使用 |
+| ignore template・差分適用 | 実装済み・未実機確認 | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
 | UI smoke更新 | 未着手 | 画面分割・管理Project・カテゴリをテストケースへ反映する |
 | Windows native検証 | 中断中 | WebDriver session作成問題を解消後に再開する |
 | macOS最終native検証 | 未完了 | 旧UIの保存導線・DMGは確認済み。現行UIで再確認する |
@@ -105,11 +106,11 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 
 ### Phase B — 設定画面の未完部分を実装する
 
-VPM tracking policyのrepository overrideとschema migrationは実装済み。Mac実機確認は端末ロック中のため未実施とし、ローカル自動検証で先行確認する。
+VPM tracking policyのrepository override、schema migration、ignore template編集・差分適用は実装済み。Mac実機確認は端末ロック中のため未実施とし、ローカル自動検証で先行確認する。
 
 - repository固有のVPM追跡方針を「全体設定に従う / 除外する / 含める」で保存する
 - 実効値と、全体既定値・repository overrideのどちらが採用されたかを表示する
-- 全体設定でignore templateを編集できる既存導線を確認し、リポジトリ設定から現在のignoreとの差分previewへ進めるようにする
+- 全体設定でignore templateを編集し、リポジトリ設定から現在のignoreとの差分previewと不足ruleの明示適用を行えるようにする
 - repository設定はapp dataの`settings.json`へ保存し、設定変更だけでrepositoryをdirtyにしない
 - schema migration、canonical path、stale repository設定をテストする
 

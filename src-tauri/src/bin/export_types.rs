@@ -3,15 +3,15 @@ use ts_rs::{Config, TS};
 use vsedi_lib::{
     errors::{AppError, ErrorCode},
     models::{
-        AppSettings, ChangeKind, ChangedFile, CommitDetail, ConfigFileDiagnostic,
-        DiagnosticSeverity, DiagnosticStatus, EnvironmentDiagnostic, FileDiagnosticStatus,
-        FileDiff, FileDiffKind, GitDiagnostic, HistoryEntry, IgnoreFilePreview,
-        IgnoreTemplateSettings, InitializeRepositoryRequest, LogSnapshot, PlatformDiagnostic,
-        ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus, RecentProject,
-        RecentProjectStatus, RepositoryBlockingReason, RepositoryDiagnostic,
-        RepositoryInitializationPreview, RepositorySettings, RepositoryState, SaveRequest,
-        SaveResult, SettingsLoadResult, SourceControlDiagnostic, VpmDiagnostic, VpmPackage,
-        VpmTrackingPolicy, WorktreeSnapshot,
+        AppSettings, ApplyIgnoreRulesRequest, ChangeKind, ChangedFile, CommitDetail,
+        ConfigFileDiagnostic, DiagnosticSeverity, DiagnosticStatus, EnvironmentDiagnostic,
+        FileDiagnosticStatus, FileDiff, FileDiffKind, GitDiagnostic, HistoryEntry,
+        IgnoreFilePreview, IgnoreTemplateSettings, InitializeRepositoryRequest, LogSnapshot,
+        PlatformDiagnostic, ProjectDiagnostic, ProjectIssue, ProjectKind, ProjectStatus,
+        RecentProject, RecentProjectStatus, RepositoryBlockingReason, RepositoryDiagnostic,
+        RepositoryIgnorePreview, RepositoryInitializationPreview, RepositorySettings,
+        RepositoryState, SaveRequest, SaveResult, SettingsLoadResult, SourceControlDiagnostic,
+        VpmDiagnostic, VpmPackage, VpmTrackingPolicy, WorktreeSnapshot,
     },
 };
 
@@ -42,6 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         WorktreeSnapshot::export_to_string(&config)?,
         IgnoreFilePreview::export_to_string(&config)?,
         RepositoryInitializationPreview::export_to_string(&config)?,
+        RepositoryIgnorePreview::export_to_string(&config)?,
+        ApplyIgnoreRulesRequest::export_to_string(&config)?,
         InitializeRepositoryRequest::export_to_string(&config)?,
         SaveRequest::export_to_string(&config)?,
         SaveResult::export_to_string(&config)?,

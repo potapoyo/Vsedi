@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { LogWindow } from "@/LogWindow";
-import type { AppError, CommitDetail, EnvironmentDiagnostic, FileDiff, HistoryEntry, ProjectDiagnostic, RepositoryInitializationPreview, RepositoryState, SaveResult, SettingsLoadResult, VpmTrackingPolicy, WorktreeSnapshot } from "@/generated/bindings";
-import { exportDiagnosticLog, initializeRepository, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, previewRepositoryInitialization, readCommitDetail, readCommitDiff, readHistory, readRepositoryState, readWorktreeDiff, readWorktreeSnapshot, saveSettings, saveWorktree } from "@/lib/commands";
+import type { AppError, CommitDetail, EnvironmentDiagnostic, FileDiff, HistoryEntry, IgnoreTemplateSettings, ProjectDiagnostic, RepositoryIgnorePreview, RepositoryInitializationPreview, RepositoryState, SaveResult, SettingsLoadResult, VpmTrackingPolicy, WorktreeSnapshot } from "@/generated/bindings";
+import { applyIgnoreRules, exportDiagnosticLog, initializeRepository, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, previewIgnoreRules, previewRepositoryInitialization, readCommitDetail, readCommitDiff, readHistory, readRepositoryState, readWorktreeDiff, readWorktreeSnapshot, saveSettings, saveWorktree } from "@/lib/commands";
 
 type GlobalSettingsSection = "GENERAL" | "DEFAULTS" | "ENVIRONMENT" | "LOGGING";
 type RepositorySection = "WORK" | "HISTORY" | "SETTINGS";
@@ -31,6 +31,7 @@ function MainWindow() {
   const [commitDetail, setCommitDetail] = useState<CommitDetail | null>(null);
   const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
   const [initializationPreview, setInitializationPreview] = useState<RepositoryInitializationPreview | null>(null);
+  const [ignorePreview, setIgnorePreview] = useState<RepositoryIgnorePreview | null>(null);
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<AppError | null>(null);
@@ -68,6 +69,7 @@ function MainWindow() {
     setCommitDetail(null);
     setFileDiff(null);
     setInitializationPreview(null);
+    setIgnorePreview(null);
     setSaveResult(null);
   };
 
@@ -154,6 +156,11 @@ function MainWindow() {
     await updateSettings({ ...settings.settings, logLevel });
   };
 
+  const updateIgnoreTemplates = async (ignoreTemplates: IgnoreTemplateSettings) => {
+    if (!settings) return;
+    await updateSettings({ ...settings.settings, ignoreTemplates });
+  };
+
   const updateProjectCategory = async (path: string, category: string | null) => {
     if (!settings) return;
     const normalizedCategory = category?.trim() || null;
@@ -178,6 +185,24 @@ function MainWindow() {
     if (!project) return;
     await run("初期化内容を確認", async () => {
       setInitializationPreview(await previewRepositoryInitialization(project.path));
+    });
+  };
+
+  const previewIgnore = async () => {
+    if (!project?.repository.detected) return;
+    await run("ignore ruleを確認", async () => {
+      setIgnorePreview(await previewIgnoreRules(project.path));
+    });
+  };
+
+  const applyIgnore = async () => {
+    if (!project || !ignorePreview) return;
+    await run("ignore ruleを適用", async () => {
+      await applyIgnoreRules({ projectPath: project.path, statusToken: ignorePreview.statusToken });
+      setIgnorePreview(null);
+      const refreshed = await inspectProject(project.path);
+      setProject(refreshed);
+      await reloadRepositoryData(project.path);
     });
   };
 
@@ -302,6 +327,7 @@ function MainWindow() {
               onOpenLogs={() => void openLogs()}
               onOpenLogFolder={() => void openLogFolder()}
               onExportLog={() => void exportLog()}
+              onUpdateIgnoreTemplates={(templates) => void updateIgnoreTemplates(templates)}
             />
           )}
 
@@ -345,6 +371,9 @@ function MainWindow() {
               onCancelInitialization={() => setInitializationPreview(null)}
               onOpenGlobalDefaults={() => setRoute({ page: "GLOBAL_SETTINGS", section: "DEFAULTS" })}
               onUpdateVpm={(policy) => void updateRepositoryVpmTrackingPolicy(policy)}
+              ignorePreview={ignorePreview}
+              onPreviewIgnore={() => void previewIgnore()}
+              onApplyIgnore={() => void applyIgnore()}
             />
           )}
         </div>
@@ -458,22 +487,33 @@ function HistoryPage({ history, commitDetail, fileDiff, busy, onSelectCommit, on
   return <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"><Card><CardHeader><h3 className="font-semibold">保存履歴</h3><p className="mt-1 text-xs text-slate-500">過去の保存を選ぶと、変更内容を確認できます。</p></CardHeader><CardContent>{history.length ? <div className="space-y-2">{history.map((entry) => <button type="button" key={entry.commitId} onClick={() => onSelectCommit(entry)} disabled={busy} className={`w-full rounded-xl px-3 py-3 text-left transition ${commitDetail?.commitId === entry.commitId ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}><p className="truncate text-sm font-semibold">{entry.memo}</p><p className={`mt-1 text-xs ${commitDetail?.commitId === entry.commitId ? "text-slate-300" : "text-slate-500"}`}>{entry.shortCommitId} · {entry.authorTime}</p></button>)}</div> : <p className="py-6 text-center text-sm text-slate-500">まだ保存履歴はありません。</p>}</CardContent></Card><div className="space-y-5">{commitDetail ? <Card><CardHeader><h3 className="font-semibold">保存の詳細</h3></CardHeader><CardContent><p className="text-lg font-semibold">{commitDetail.memo}</p><p className="mt-1 break-all text-xs text-slate-500">{commitDetail.commitId} · {commitDetail.authorTime}</p><div className="mt-5 space-y-2">{commitDetail.files.map((file) => <button type="button" onClick={() => onShowDiff(file.path)} disabled={busy} key={`${file.path}-${file.oldPath ?? ""}`} className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"><span className="min-w-0 truncate">{file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{changeKindLabel(file.changeKind)}</span></button>)}</div><p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">安全な復元はM4でこの画面から開始します。履歴を選択しただけでは現在の作業は変わりません。</p></CardContent></Card> : <Card><CardContent><p className="py-8 text-center text-sm text-slate-500">左から保存を選択してください。</p></CardContent></Card>}{fileDiff && <DiffPanel diff={fileDiff} />}</div></div>;
 }
 
-function RepositorySettingsPage({ project, settings, initializationPreview, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onOpenGlobalDefaults, onUpdateVpm }: { project: ProjectDiagnostic; settings: SettingsLoadResult | null; initializationPreview: RepositoryInitializationPreview | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onOpenGlobalDefaults: () => void; onUpdateVpm: (policy: VpmTrackingPolicy | null) => void }) {
+function RepositorySettingsPage({ project, settings, initializationPreview, ignorePreview, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onOpenGlobalDefaults, onUpdateVpm, onPreviewIgnore, onApplyIgnore }: { project: ProjectDiagnostic; settings: SettingsLoadResult | null; initializationPreview: RepositoryInitializationPreview | null; ignorePreview: RepositoryIgnorePreview | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onOpenGlobalDefaults: () => void; onUpdateVpm: (policy: VpmTrackingPolicy | null) => void; onPreviewIgnore: () => void; onApplyIgnore: () => void }) {
   const repositoryRoot = project.repository.root;
   const override = repositoryRoot
     ? settings?.settings.repositorySettings.find((item) => item.repositoryRoot === repositoryRoot)?.vpmTrackingPolicyOverride ?? null
     : null;
   const effectivePolicy = override ?? settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES";
   const effectiveLabel = effectivePolicy === "INCLUDE_PACKAGES" ? "含める" : "除外する";
-  return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">このrepositoryの設定</h3><p className="mt-1 text-xs text-slate-500">設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent className="space-y-5"><div className="rounded-xl bg-slate-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">実効値: {effectiveLabel}（{override ? "repository固有の設定" : "全体設定の既定値"}）</p></div><StatusPill label={effectiveLabel} tone="neutral" /></div>{repositoryRoot ? <div className="mt-4 flex flex-wrap gap-2"><Button variant={override === null ? "primary" : "secondary"} onClick={() => onUpdateVpm(null)} disabled={busy}>全体設定に従う</Button><Button variant={override === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={override === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div> : <p className="mt-4 text-sm text-slate-600">repositoryが未作成のため、全体設定の既定値を使用します。</p>}<Button className="mt-3" variant="ghost" onClick={onOpenGlobalDefaults}>全体の既定値を開く</Button></div><div className="grid gap-3 md:grid-cols-2"><DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} /><DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} /></div></CardContent></Card><Card><CardHeader><h3 className="font-semibold">project情報</h3></CardHeader><CardContent><dl className="grid gap-x-6 gap-y-4 text-sm md:grid-cols-2"><Definition label="project folder" value={project.path} /><Definition label="種別" value={projectKindLabel(project.projectKind)} /><Definition label="Unity" value={project.unityVersion ? `Unity ${project.unityVersion}` : "不明"} /><Definition label="repository" value={project.repository.detected ? "検出済み" : "未作成"} /></dl></CardContent></Card>{project.isUnityProject && !project.repository.detected && <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} />}</div>;
+  const hasMissingRules = ignorePreview?.ignoreFiles.some((file) => file.missingRules.length > 0) ?? false;
+  return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">このrepositoryの設定</h3><p className="mt-1 text-xs text-slate-500">設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent className="space-y-5"><div className="rounded-xl bg-slate-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">実効値: {effectiveLabel}（{override ? "repository固有の設定" : "全体設定の既定値"}）</p></div><StatusPill label={effectiveLabel} tone="neutral" /></div>{repositoryRoot ? <div className="mt-4 flex flex-wrap gap-2"><Button variant={override === null ? "primary" : "secondary"} onClick={() => onUpdateVpm(null)} disabled={busy}>全体設定に従う</Button><Button variant={override === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={override === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div> : <p className="mt-4 text-sm text-slate-600">repositoryが未作成のため、全体設定の既定値を使用します。</p>}<Button className="mt-3" variant="ghost" onClick={onOpenGlobalDefaults}>全体の既定値を開く</Button></div><div className="grid gap-3 md:grid-cols-2"><DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} /><DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} /></div></CardContent></Card><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">ignore rule</h3><p className="mt-1 text-xs text-slate-500">不足しているruleだけを確認して追加します。既存ruleは削除しません。</p></div><Button variant="secondary" onClick={onPreviewIgnore} disabled={busy || !project.repository.detected}>不足ruleを確認</Button></div></CardHeader><CardContent>{ignorePreview ? <div className="space-y-3">{ignorePreview.ignoreFiles.map((file) => <div key={file.path} className="rounded-xl bg-slate-50 px-4 py-3"><p className="text-sm font-semibold">{file.path}{file.willCreate ? "（新規作成）" : ""}</p>{file.missingRules.length ? <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{file.missingRules.join("\n")}</p> : <p className="mt-1 text-xs text-slate-500">不足ruleはありません。</p>}</div>)}{ignorePreview.blockingReason && <BlockingNotice tone="danger">{ignorePreview.blockingReason}</BlockingNotice>}{ignorePreview.canApply && hasMissingRules && <Button onClick={onApplyIgnore} disabled={busy}>この内容を適用</Button>}{ignorePreview.canApply && !hasMissingRules && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">現在のtemplateとの差分はありません。</p>}</div> : <p className="text-sm text-slate-600">確認すると、現在のtemplateとrepositoryのignore ruleとの差分を表示します。</p>}</CardContent></Card><Card><CardHeader><h3 className="font-semibold">project情報</h3></CardHeader><CardContent><dl className="grid gap-x-6 gap-y-4 text-sm md:grid-cols-2"><Definition label="project folder" value={project.path} /><Definition label="種別" value={projectKindLabel(project.projectKind)} /><Definition label="Unity" value={project.unityVersion ? `Unity ${project.unityVersion}` : "不明"} /><Definition label="repository" value={project.repository.detected ? "検出済み" : "未作成"} /></dl></CardContent></Card>{project.isUnityProject && !project.repository.detected && <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} />}</div>;
 }
 
-function GlobalSettingsPage({ section, environment, settings, busy, onChangeSection, onUpdateVpm, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { section: GlobalSettingsSection; environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChangeSection: (section: GlobalSettingsSection) => void; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) {
-  return <div className="grid gap-5 lg:grid-cols-[13rem_1fr]"><Card className="h-fit"><CardContent className="space-y-1">{GLOBAL_SETTINGS_SECTIONS.map((item) => <button key={item.value} type="button" onClick={() => onChangeSection(item.value)} className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${section === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item.label}</button>)}</CardContent></Card><div>{section === "GENERAL" && <GeneralSettings settings={settings} />}{section === "DEFAULTS" && <DefaultSettings settings={settings} busy={busy} onUpdateVpm={onUpdateVpm} />}{section === "ENVIRONMENT" && <EnvironmentSettings environment={environment} />}{section === "LOGGING" && <LoggingSettings settings={settings} busy={busy} onUpdateLogLevel={onUpdateLogLevel} onOpenLogs={onOpenLogs} onOpenLogFolder={onOpenLogFolder} onExportLog={onExportLog} />}</div></div>;
+function GlobalSettingsPage({ section, environment, settings, busy, onChangeSection, onUpdateVpm, onUpdateIgnoreTemplates, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { section: GlobalSettingsSection; environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChangeSection: (section: GlobalSettingsSection) => void; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateIgnoreTemplates: (templates: IgnoreTemplateSettings) => void; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) {
+  return <div className="grid gap-5 lg:grid-cols-[13rem_1fr]"><Card className="h-fit"><CardContent className="space-y-1">{GLOBAL_SETTINGS_SECTIONS.map((item) => <button key={item.value} type="button" onClick={() => onChangeSection(item.value)} className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${section === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item.label}</button>)}</CardContent></Card><div>{section === "GENERAL" && <GeneralSettings settings={settings} />}{section === "DEFAULTS" && <DefaultSettings settings={settings} busy={busy} onUpdateVpm={onUpdateVpm} onUpdateIgnoreTemplates={onUpdateIgnoreTemplates} />}{section === "ENVIRONMENT" && <EnvironmentSettings environment={environment} />}{section === "LOGGING" && <LoggingSettings settings={settings} busy={busy} onUpdateLogLevel={onUpdateLogLevel} onOpenLogs={onOpenLogs} onOpenLogFolder={onOpenLogFolder} onExportLog={onExportLog} />}</div></div>;
 }
 
 function GeneralSettings({ settings }: { settings: SettingsLoadResult | null }) { return <Card><CardHeader><h3 className="font-semibold">一般</h3></CardHeader><CardContent><p className="text-sm text-slate-600">登録済みprojectはホームから選択します。存在しなくなったprojectはホームで「再指定」と表示されます。</p><p className="mt-4 text-xs text-slate-400">登録数: {settings?.recentProjects.length ?? 0} 件</p></CardContent></Card>; }
-function DefaultSettings({ settings, busy, onUpdateVpm }: { settings: SettingsLoadResult | null; busy: boolean; onUpdateVpm: (policy: VpmTrackingPolicy) => void }) { const policy = settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES"; return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">新規repositoryの既定値</h3><p className="mt-1 text-xs text-slate-500">既存repositoryには自動適用しません。</p></CardHeader><CardContent><p className="text-sm font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">新しく選択したprojectの診断と初期化previewに使う既定値です。</p><div className="mt-4 flex gap-2"><Button variant={policy === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={policy === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div></CardContent></Card><Card><CardHeader><h3 className="font-semibold">ignore template</h3></CardHeader><CardContent><p className="text-sm text-slate-600">Unity用とVPM用のtemplateは現在の `settings.json` で直接編集できます。専用エディタはrepository固有設定の実装と合わせて追加します。</p><p className="mt-3 text-xs text-slate-400">Unity rule: {settings?.settings.ignoreTemplates.unityRules.length ?? 0} 件 · VPM rule: {settings?.settings.ignoreTemplates.vpmExcludeRules.length ?? 0} 件</p></CardContent></Card></div>; }
+function DefaultSettings({ settings, busy, onUpdateVpm, onUpdateIgnoreTemplates }: { settings: SettingsLoadResult | null; busy: boolean; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateIgnoreTemplates: (templates: IgnoreTemplateSettings) => void }) { const policy = settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES"; return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">新規repositoryの既定値</h3><p className="mt-1 text-xs text-slate-500">既存repositoryには自動適用しません。</p></CardHeader><CardContent><p className="text-sm font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">新しく選択したprojectの診断と初期化previewに使う既定値です。</p><div className="mt-4 flex gap-2"><Button variant={policy === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={policy === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div></CardContent></Card><IgnoreTemplateEditor settings={settings} busy={busy} onSave={onUpdateIgnoreTemplates} /></div>; }
+
+function IgnoreTemplateEditor({ settings, busy, onSave }: { settings: SettingsLoadResult | null; busy: boolean; onSave: (templates: IgnoreTemplateSettings) => void }) {
+  const [unityText, setUnityText] = useState("");
+  const [vpmText, setVpmText] = useState("");
+  const unitySource = settings?.settings.ignoreTemplates.unityRules.join("\n") ?? "";
+  const vpmSource = settings?.settings.ignoreTemplates.vpmExcludeRules.join("\n") ?? "";
+  useEffect(() => setUnityText(unitySource), [unitySource]);
+  useEffect(() => setVpmText(vpmSource), [vpmSource]);
+  return <Card><CardHeader><h3 className="font-semibold">ignore template</h3><p className="mt-1 text-xs text-slate-500">新規repositoryの初期化と、既存repositoryの不足rule previewに使います。既存repositoryへ自動適用はしません。</p></CardHeader><CardContent className="space-y-4"><label className="block text-sm font-semibold" htmlFor="unity-ignore-template">Unity rules</label><textarea id="unity-ignore-template" className="min-h-48 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs leading-5" value={unityText} onChange={(event) => setUnityText(event.target.value)} disabled={busy || !settings} spellCheck={false} /><label className="block text-sm font-semibold" htmlFor="vpm-ignore-template">VPM exclude rules</label><textarea id="vpm-ignore-template" className="min-h-32 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs leading-5" value={vpmText} onChange={(event) => setVpmText(event.target.value)} disabled={busy || !settings} spellCheck={false} /><div className="flex items-center justify-between gap-3"><p className="text-xs text-slate-500">空行とコメントはtemplateの一部として保持します。</p><Button onClick={() => onSave({ unityRules: parseTemplateText(unityText), vpmExcludeRules: parseTemplateText(vpmText) })} disabled={busy || !settings}>templateを保存</Button></div></CardContent></Card>;
+}
 function EnvironmentSettings({ environment }: { environment: EnvironmentDiagnostic | null }) { return <div className="grid gap-5 md:grid-cols-2"><SummaryTile label="実行環境" value={environment ? `${environment.platform.os} / ${environment.platform.architecture}` : "確認中"} detail="正式対応: Windows / Apple Silicon macOS" tone={environment?.platform.supported ? "good" : "warn"} /><SummaryTile label="System Git" value={environment?.git.status === "AVAILABLE" ? "利用可能" : "未検出"} detail={environment?.git.version ?? "PATHから検出します"} tone={environment?.git.status === "AVAILABLE" ? "good" : "warn"} /></div>; }
 function LoggingSettings({ settings, busy, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { settings: SettingsLoadResult | null; busy: boolean; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) { return <Card><CardHeader><h3 className="font-semibold">ログと診断</h3><p className="mt-1 text-xs text-slate-500">ログレベルの変更は即時適用され、次回起動後も保持されます。</p></CardHeader><CardContent><label className="text-sm font-semibold" htmlFor="log-level">ログレベル</label><select id="log-level" className="mt-2 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={settings?.settings.logLevel ?? "INFO"} onChange={(event) => onUpdateLogLevel(event.target.value)} disabled={busy || !settings}>{LOG_LEVEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><p className="mt-3 text-sm leading-6 text-slate-600">ログ表示では、30日保持の対象となるサニタイズ済みログをすべて表示します。</p><div className="mt-5 flex flex-wrap gap-2"><Button variant="secondary" onClick={onOpenLogs} disabled={busy}>ログ表示</Button><Button variant="secondary" onClick={onOpenLogFolder} disabled={busy}>ログフォルダ</Button><Button onClick={onExportLog} disabled={busy}>診断ログを書き出す</Button></div></CardContent></Card>; }
 
@@ -491,6 +531,7 @@ function currentWindowLabel() { try { return getCurrentWindow().label; } catch {
 function normalizeError(error: unknown): AppError { if (isAppError(error)) return error; return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false }; }
 function projectName(path: string) { const parts = path.split(/[\\/]/).filter(Boolean); return parts.at(-1) ?? path; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ja-JP"); }
+function parseTemplateText(value: string) { const lines = value.replace(/\r\n/g, "\n").split("\n"); return lines.at(-1) === "" ? lines.slice(0, -1) : lines; }
 function compareManagedProjects(left: SettingsLoadResult["recentProjects"][number], right: SettingsLoadResult["recentProjects"][number]) { return (right.lastOpenedAt ?? "").localeCompare(left.lastOpenedAt ?? "") || left.path.localeCompare(right.path, "ja"); }
 function projectStatusLabel(status: ProjectDiagnostic["status"]) { return status === "MANAGEABLE" ? "管理可能" : status === "NEEDS_ATTENTION" ? "要確認" : "非 Unity"; }
 function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) { const labels: Record<ProjectDiagnostic["projectKind"], string> = { UNITY: "Unity project", VRCHAT_AVATAR: "VRChat Avatar", VRCHAT_WORLD: "VRChat World", VRCHAT_UNKNOWN: "VRChat 種別不明" }; return labels[kind]; }
