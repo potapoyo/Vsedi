@@ -1,0 +1,50 @@
+name: UI Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-case:
+        description: 'テストケース名 (全テストの場合は空)'
+        required: false
+        default: ''
+      screenshot-on-failure:
+        description: '失敗時にスクリーンショットを撮影'
+        type: boolean
+        default: true
+
+jobs:
+  ui-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Build frontend
+        run: pnpm build
+      
+      - name: Start dev server
+        run: pnpm dev &
+      
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      
+      - name: Run UI tests
+        run: pnpm test -- --test-case ${{ github.event.inputs.test-case }}
+      
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-screenshots
+          path: tests/screenshots/

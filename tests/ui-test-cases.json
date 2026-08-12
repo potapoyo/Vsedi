@@ -1,0 +1,38 @@
+{
+  "screens": {
+    "main": {
+      "title": "メイン画面",
+      "url": "/index.html",
+      "navigations": [],
+      "assertions": [
+        { "type": "element", "selector": "h1", "text": "Vsedi" },
+        { "type": "button", "selector": "button", "text": "フォルダを選択" },
+        { "type": "element", "selector": "h2", "text": "実行環境" },
+        { "type": "element", "selector": "h2", "text": "System Git" }
+      ],
+      "screenshot": {
+        "onSuccess": true,
+        "onFailure": true
+      }
+    },
+    "log-window": {
+      "title": "ログウィンドウ",
+      "url": "/index.html",
+      "navigations": [
+        { "action": "click", "selector": "ログ表示" }
+      ],
+      "assertions": [
+        { "type": "element", "selector": "pre", "exists": true },
+        { "type": "text", "selector": "pre", "contains": "ログ" }
+      ],
+      "screenshot": {
+        "onSuccess": true,
+        "onFailure": true
+      }
+    }
+  },
+  "actions": {
+    "click": { "type": "click", "selector": "button" },
+    "fill": { "type": "fill", "selector": "input", "value": "test" }
+  }
+}

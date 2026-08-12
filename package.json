@@ -12,7 +12,9 @@
     "tauri:build:macos": "env CI=true tauri build",
     "typecheck": "tsc --noEmit",
     "generate-types": "cargo run --manifest-path src-tauri/Cargo.toml --bin export_types",
-    "check-generated-types": "sh scripts/check-generated-types.sh"
+    "check-generated-types": "sh scripts/check-generated-types.sh",
+    "test": "node tests/run-ui-tests.cjs",
+    "test:watch": "node tests/run-ui-tests.cjs --watch"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
