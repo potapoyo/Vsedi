@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
@@ -27,22 +27,30 @@ function MainWindow() {
   const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
-  const refresh = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const [environmentResult, settingsResult] = await Promise.all([inspectEnvironment(), loadSettings()]);
-      setEnvironment(environmentResult);
-      setSettings(settingsResult);
-      if (settingsResult.recentProjects[0]?.exists) {
-        setProject(await inspectProject(settingsResult.recentProjects[0].path, settingsResult.settings.vpmTrackingPolicy));
+  const refresh = () => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const task = (async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const [environmentResult, settingsResult] = await Promise.all([inspectEnvironment(), loadSettings()]);
+        setEnvironment(environmentResult);
+        setSettings(settingsResult);
+        if (settingsResult.recentProjects[0]?.exists) {
+          setProject(await inspectProject(settingsResult.recentProjects[0].path, settingsResult.settings.vpmTrackingPolicy));
+        }
+      } catch (caught) {
+        setError(normalizeError(caught));
+      } finally {
+        setBusy(false);
       }
-    } catch (caught) {
-      setError(normalizeError(caught));
-    } finally {
-      setBusy(false);
-    }
+    })();
+    refreshInFlight.current = task.finally(() => {
+      refreshInFlight.current = null;
+    });
+    return refreshInFlight.current;
   };
 
   useEffect(() => {
@@ -301,7 +309,7 @@ function MainWindow() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-slate-700">現在の変更</p>
-                          <p className="mt-1 text-xs text-slate-500">保存対象は repository 全体です。保存機能は次の M3 作業で追加します。</p>
+                          <p className="mt-1 text-xs text-slate-500">保存対象は repository 全体です。変更内容を確認してから保存できます。</p>
                         </div>
                         <StatusPill label={repositoryState?.canSave ? "保存可能" : repositoryState ? "確認が必要" : "読み込み中"} tone={repositoryState?.canSave ? "good" : "warn"} />
                       </div>
@@ -313,7 +321,7 @@ function MainWindow() {
                     </div>
                   )}
 
-                  {project.isUnityProject && project.repository.detected === false && (
+                  {project.isUnityProject && project.repository.detected !== true && (
                     <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
                       <p className="text-sm font-semibold text-sky-900">ローカル保存を始める</p>
                       <p className="mt-1 text-xs leading-5 text-sky-800">Git repository と Unity 用の ignore rule を作成します。既存の .gitignore は置換せず、不足ルールだけを追記します。</p>
