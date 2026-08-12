@@ -75,4 +75,33 @@ mod tests {
         assert!(value.starts_with("custom\r\n\r\n")); assert!(value.contains("/[Ll]ibrary/\r\n"));
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn rejects_a_stale_preview_without_initializing_repository() {
+        let root = std::env::temp_dir().join(format!("vsedi-init-stale-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&root).unwrap();
+        let templates = IgnoreTemplateSettings::default();
+        let preview = preview(root.to_str().unwrap(), VpmTrackingPolicy::ExcludePackages, &templates).unwrap();
+        fs::write(root.join(".gitignore"), "custom\n").unwrap();
+
+        let error = initialize(root.to_str().unwrap(), &preview.status_token, VpmTrackingPolicy::ExcludePackages, &templates).unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RepositoryStateChanged);
+        assert!(!root.join(".git").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preview_blocks_duplicate_repository_initialization() {
+        let root = std::env::temp_dir().join(format!("vsedi-init-existing-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&root).unwrap();
+        let status = std::process::Command::new("git").args(["init"]).current_dir(&root).status().unwrap();
+        assert!(status.success());
+
+        let preview = preview(root.to_str().unwrap(), VpmTrackingPolicy::ExcludePackages, &IgnoreTemplateSettings::default()).unwrap();
+
+        assert!(!preview.can_initialize);
+        assert!(preview.blocking_reason.is_some());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

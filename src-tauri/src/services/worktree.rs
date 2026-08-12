@@ -4,7 +4,11 @@ use crate::{
     models::{RepositoryBlockingReason, RepositoryState, WorktreeSnapshot},
     platform::process::find_executable,
 };
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 pub fn read_repository_state(project_path: &str) -> AppResult<RepositoryState> {
     let project = canonical_project(project_path)?;
@@ -36,7 +40,9 @@ fn read_worktree_snapshot_at(git: &Path, root: &Path, project: &Path) -> AppResu
         .map_err(|error| AppError::with_detail(ErrorCode::WorktreeReadFailed, "変更一覧を読み取れませんでした。", "read_worktree_snapshot", error.to_string(), false))?;
     if output.status != Some(0) { return Err(AppError::simple(ErrorCode::WorktreeReadFailed, "変更一覧を読み取れませんでした。", "read_worktree_snapshot")); }
     let project_prefix = project.strip_prefix(root).ok().and_then(|path| path.to_str()).map(|path| if path.is_empty() { String::new() } else { format!("{}/", path.trim_end_matches('/')) });
-    parse_porcelain_v2(&output.stdout, project_prefix.as_deref()).map_err(|detail| AppError::with_detail(ErrorCode::WorktreeReadFailed, "変更一覧を安全に解析できませんでした。", "parse_git_status", detail, false))
+    let mut snapshot = parse_porcelain_v2(&output.stdout, project_prefix.as_deref()).map_err(|detail| AppError::with_detail(ErrorCode::WorktreeReadFailed, "変更一覧を安全に解析できませんでした。", "parse_git_status", detail, false))?;
+    snapshot.status_token = content_aware_status_token(&output.stdout, root, &snapshot.files);
+    Ok(snapshot)
 }
 
 fn canonical_project(path: &str) -> AppResult<PathBuf> {
@@ -46,3 +52,64 @@ fn canonical_project(path: &str) -> AppResult<PathBuf> {
 }
 fn git_success(git: &Path, args: &[&str], root: &Path) -> AppResult<bool> { Ok(run_git(git, args, Some(root)).map_err(|error| AppError::with_detail(ErrorCode::WorktreeReadFailed, "Git の状態を読み取れませんでした。", "read_repository_state", error.to_string(), false))?.status == Some(0)) }
 fn git_text(git: &Path, args: &[&str], root: &Path) -> AppResult<Option<String>> { let output = run_git(git, args, Some(root)).map_err(|error| AppError::with_detail(ErrorCode::WorktreeReadFailed, "Git の状態を読み取れませんでした。", "read_repository_state", error.to_string(), false))?; Ok((output.status == Some(0)).then(|| output.stdout.trim().to_owned())) }
+
+fn content_aware_status_token(output: &str, root: &Path, files: &[crate::models::ChangedFile]) -> String {
+    let mut hash = checksum(output.as_bytes());
+    for file in files {
+        mix(&mut hash, file.path.as_bytes());
+        fingerprint_path(&mut hash, root, &file.path);
+        if let Some(old_path) = &file.old_path {
+            mix(&mut hash, old_path.as_bytes());
+            fingerprint_path(&mut hash, root, old_path);
+        }
+    }
+    format!("{hash:016x}")
+}
+
+fn fingerprint_path(hash: &mut u64, root: &Path, relative: &str) {
+    let path = Path::new(relative);
+    if path.is_absolute() || path.components().any(|component| matches!(component, std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_))) {
+        mix(hash, b"invalid-path");
+        return;
+    }
+    let path = root.join(path);
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        mix(hash, b"missing");
+        return;
+    };
+    mix(hash, &metadata.len().to_le_bytes());
+    if metadata.file_type().is_symlink() {
+        match fs::read_link(path) {
+            Ok(target) => mix(hash, target.to_string_lossy().as_bytes()),
+            Err(_) => mix(hash, b"unreadable-symlink"),
+        }
+        return;
+    }
+    let Ok(mut file) = File::open(path) else {
+        mix(hash, b"unreadable");
+        return;
+    };
+    let mut buffer = [0_u8; 8192];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => mix(hash, &buffer[..read]),
+            Err(_) => {
+                mix(hash, b"read-error");
+                break;
+            }
+        }
+    }
+}
+
+fn checksum(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    mix(&mut hash, bytes);
+    hash
+}
+
+fn mix(hash: &mut u64, bytes: &[u8]) {
+    for byte in bytes {
+        *hash = (*hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+    }
+}

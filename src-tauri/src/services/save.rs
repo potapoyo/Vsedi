@@ -40,6 +40,17 @@ mod tests {
         assert!(status.success());
     }
 
+    fn repository(root: &Path) {
+        fs::create_dir_all(root).unwrap();
+        git(root, &["init"]);
+        git(root, &["config", "user.name", "Vsedi test"]);
+        git(root, &["config", "user.email", "test@example.invalid"]);
+    }
+
+    fn head(root: &Path) -> String {
+        String::from_utf8(Command::new("git").args(["rev-parse", "HEAD"]).current_dir(root).output().unwrap().stdout).unwrap().trim().to_owned()
+    }
+
     #[test]
     fn saves_a_previewed_worktree_as_a_commit() {
         let root = std::env::temp_dir().join(format!("vsedi-save-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -56,6 +67,45 @@ mod tests {
         assert_eq!(detail.files.len(), 1);
         let diff = crate::services::diff::read_commit_diff(root.to_str().unwrap(), &result.commit_id, "scene with space.txt").unwrap();
         assert_eq!(diff.kind, crate::models::FileDiffKind::Text); assert!(diff.patch.unwrap().contains("saved"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refuses_existing_staged_changes_without_mutating_head() {
+        let root = std::env::temp_dir().join(format!("vsedi-save-staged-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        repository(&root);
+        fs::write(root.join("baseline.txt"), "baseline\n").unwrap();
+        git(&root, &["add", "baseline.txt"]);
+        git(&root, &["commit", "-m", "baseline"]);
+        let before = head(&root);
+        fs::write(root.join("staged.txt"), "staged\n").unwrap();
+        git(&root, &["add", "staged.txt"]);
+        let snapshot = worktree::read_worktree_snapshot(root.to_str().unwrap()).unwrap();
+
+        let error = save(SaveRequest { project_path: root.to_string_lossy().into_owned(), status_token: snapshot.status_token, memo: "拒否される保存".to_owned() }).unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::SaveExistingStagedChanges);
+        assert_eq!(head(&root), before);
+        assert!(root.join("staged.txt").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refuses_a_stale_preview_before_git_add() {
+        let root = std::env::temp_dir().join(format!("vsedi-save-stale-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        repository(&root);
+        fs::write(root.join("baseline.txt"), "baseline\n").unwrap();
+        git(&root, &["add", "baseline.txt"]);
+        git(&root, &["commit", "-m", "baseline"]);
+        fs::write(root.join("scene.txt"), "before preview\n").unwrap();
+        let snapshot = worktree::read_worktree_snapshot(root.to_str().unwrap()).unwrap();
+        fs::write(root.join("scene.txt"), "after preview\n").unwrap();
+
+        let error = save(SaveRequest { project_path: root.to_string_lossy().into_owned(), status_token: snapshot.status_token, memo: "状態変化".to_owned() }).unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RepositoryStateChanged);
+        assert!(!root.join(".git/index.lock").exists());
+        assert!(worktree::read_worktree_snapshot(root.to_str().unwrap()).unwrap().files.iter().any(|file| file.path == "scene.txt"));
         fs::remove_dir_all(root).unwrap();
     }
 }
