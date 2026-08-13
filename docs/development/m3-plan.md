@@ -34,8 +34,8 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | 層 | 役割 | 現在の状態 |
 | --- | --- | --- |
 | 通常CI | typecheck、frontend build、Rust test、Clippy、生成型整合性 | 利用可能 |
-| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | 現行UI向け4ケースをローカルで成功。Windows / macOS workflowの実行記録が未完了 |
-| Native UI test | WebView、Rust IPC、native windowを通る自動確認 | Windowsでsession作成に失敗し調査中断。macOSは未追加 |
+| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | Windows / macOSのfixtureを分離した4ケースをローカルで成功。PR / 手動workflowを実装済み、Actions実行記録が未完了 |
+| Native UI test | WebView、Rust IPC、native windowを通る自動確認 | embedded WebDriver方式へ更新し、macOS実機で最小ケースが成功。Windows / macOS Actions実行が未完了 |
 | 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOS現行UIの`.app`は合格、DMG確認が未完了。Windowsは再ビルドとexe起動まで成功、GUI操作が未完了 |
 
 ## 現在地
@@ -53,9 +53,9 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | stale Project管理 | 実装済み・配布物での再確認待ち | 場所の再指定、一覧からの削除、重複登録防止を実装 |
 | repository固有設定 | 実装済み・配布物での詳細操作確認待ち | VPM overrideをsettings schema 5からschema 6へ引き継ぎ、診断・初期化で実効値を使用 |
 | ignore template・差分適用 | 実装済み・配布物での詳細操作確認待ち | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
-| UI smoke更新 | 完了（ローカル） | 現行UIの4ケース、タグ・検索・設定・保存履歴をテストケースへ反映済み。workflow実行は未記録 |
-| Windows native検証 | CI中断・手動GUI未完了 | WebDriverの`DevToolsActivePort file doesn't exist`とComputer Use helperの`EPERM`を別問題として記録 |
-| macOS最終native検証 | `.app`合格・DMG未完了 | 現行UIの`.app`で中心導線を確認済み。現行UI DMGの生成・インストールが残る |
+| UI smoke更新 | 実装・ローカル完了 | 現行UIの4ケースをWindows / macOS fixtureで各4件成功。PR / 手動workflowのActions実行は未記録 |
+| Windows native検証 | embedded方式のActions実行待ち・手動GUI未完了 | 旧external方式の`DevToolsActivePort`依存を廃止。新方式のWindows runner結果と配布物GUI操作が未完了 |
+| macOS最終native検証 | native自動テストと`.app`合格・DMG未完了 | embedded WebDriverで起動、全体設定、実OS / System Git表示を確認済み。現行UI DMGの生成・インストールが残る |
 
 ## 他PC向け引き継ぎ時点の残タスク
 
@@ -69,10 +69,10 @@ git pull --ff-only origin codex/m3-local-save
 
 1. **Windows配布物GUI smoke** — 再生成したMSI / NSISの少なくとも一方（可能なら両方）をインストールし、環境診断、Project追加、初期化preview、現在の作業の保存、履歴・diff、タグ・設定、再起動後の復元を確認する。Computer Use helperの`EPERM`を解消できない場合は、Windows上の手動操作で代替し、スクリーンショットとログを記録する。
 2. **macOS現行UI DMG** — `bundle_dmg.sh`のエラーを解消または切り分け、現行UIのDMG生成・マウント・起動を確認する。`.app`の現行UI smokeは合格済み。
-3. **Playwright workflowの実行記録** — `workflow_dispatch`でWindowsとApple Silicon macOSを実行し、現行UIの4ケースとartifactを確認する。失敗しても通常CIの必須checkにはしない。
+3. **UI workflowの実行記録** — Playwrightとembedded native UIの両workflowをWindows / Apple Silicon macOSで実行し、テスト結果、スクリーンショット、driver / app logを確認する。失敗しても通常CIの必須checkにはしない。
 4. **M3完了判定と文書更新** — 両OSの配布物で`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。
 
-Windows native UI CIのWebDriver調査は、配布物の手動GUI smokeとは独立した保留工程である。未検証項目を成功扱いせず、手動結果で補完できる範囲とCI固有の未解決問題を分けて記録する。
+Windows native UI CIは旧external driver方式を廃止し、アプリ内のdebug限定embedded WebDriver方式へ更新した。配布物の手動GUI smokeとは独立して結果を記録し、Actionsで未検証の項目を成功扱いしない。
 
 ## 対象範囲
 
@@ -136,13 +136,14 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: 全体設定とrepository設定の責務がUIと保存形式の両方で一致し、設定画面を開いただけではrepositoryを変更しない。
 
-### Phase C — UI smoke testを現行画面へ追従させる（ローカル完了・CI実行待ち）
+### Phase C — UI smoke testを現行画面へ追従させる（実装・ローカル完了、Actions実行待ち）
 
 - `origin/main`のUI test基盤をM3 branchへ取り込み済み
 - JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、タグ編集・絞り込み・Project検索へ更新済み
 - Rust IPCをmockし、成功・empty・blocking errorを決定的に再現する4ケースをローカルで成功済み
-- WindowsとApple Silicon macOSのPlaywright手動workflowを実行し、スクリーンショットとtraceをartifactで確認する
-- UI workflowは当面`workflow_dispatch`のみとし、通常CIへは組み込まない
+- WindowsとApple Silicon macOSで異なる実行環境fixtureを使い、ローカルで各4ケースを成功済み
+- `pull_request`と`workflow_dispatch`でWindows / macOS matrixを実行し、結果とPlaywright artifactを保持するworkflowへ更新済み
+- GitHub Actions上で両OSの実行結果とartifactを確認する
 
 完了条件: 両OSのPlaywright smokeが現行UIの主要navigationと表示を通過する。
 
@@ -156,18 +157,16 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: M3の状態変更と設定migrationに既知のデータ損失経路がなく、通常CIが成功する。
 
-### Phase E — Native UI CIを再開する（CI工程・保留）
+### Phase E — Native UI CIを再開する（実装・macOSローカル完了、Actions実行待ち）
 
-製品実装と通常CIを止めず、手動workflow内で調査する。
+- `@wdio/tauri-service`のembedded providerを採用し、WindowsのEdgeDriverとmacOSの外部driverへの依存を廃止した
+- `native-ui-test` Cargo feature、テスト専用Tauri設定、frontend pluginをdebug test buildだけへ分離した。通常buildではWDIOコード、権限、WebDriver serverを含めない
+- Windows / macOS matrixでdebug appをbuildし、起動、ホーム、全体設定、実行環境、System Gitを確認する手動workflowを実装した
+- 失敗時のスクリーンショットとWDIO / backend log、成功時の実行環境スクリーンショットをartifactへ保存する
+- Apple Silicon macOS実機でnative UI smoke 1件が成功した
+- GitHub Actions上でWindows / macOS jobを実行し、両方の結果とartifactを確認する
 
-1. Windows runnerでTauri executable単体の起動可否、process終了、WebView2 user-data directoryをartifactへ記録する
-2. `tauri:options.webviewOptions`を明示した最小sessionを検証する
-3. `@wdio/tauri-service`のembedded / external providerの現行対応範囲を確認する
-4. 必要ならWebdriverIO v7 + 手動`tauri-driver`方式を比較用branchで試し、製品コードへテスト専用変更を入れない
-5. session作成後に、起動、Rust環境診断、Project選択、ログwindowの最小ケースを通す
-6. Windows方式が安定してから、macOS native workflowの方式を決める
-
-完了条件: native test本体が少なくとも1件実行され、失敗時にdriver / app logとスクリーンショットを回収できる。安定するまでは通常CIの必須checkにしない。
+完了条件: Actions上の両OSでnative test本体が少なくとも1件成功し、失敗時にもdriver / app logとスクリーンショットを回収できる。安定するまでは通常CIの必須checkにしない。
 
 ### Phase F — 両OSの配布物smokeとInternal Alpha判定
 

@@ -7,6 +7,21 @@ on:
         description: "テストケース名（空欄で全ケース）"
         required: false
         default: ""
+  pull_request:
+    paths:
+      - ".github/workflows/ui-test.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "playwright.config.ts"
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ui-test:
@@ -14,10 +29,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-14]
+        include:
+          - os: windows-latest
+            platform: windows
+            architecture: x86_64
+          - os: macos-14
+            platform: macos
+            architecture: aarch64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     env:
       UI_TEST_CASE: ${{ inputs.test-case }}
+      UI_TEST_PLATFORM: ${{ matrix.platform }}
+      UI_TEST_ARCHITECTURE: ${{ matrix.architecture }}
+      CI: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,10 +57,10 @@ jobs:
       - run: pnpm exec playwright install chromium
       - run: pnpm test:ui
       - name: Upload UI test artifacts
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ui-test-${{ matrix.os }}
+          name: ui-test-${{ matrix.platform }}-${{ github.run_attempt }}
           path: |
             test-results/
             playwright-report/

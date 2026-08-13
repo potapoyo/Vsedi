@@ -1,0 +1,63 @@
+name: Native UI Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ui-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-ui-test:
+    name: ${{ matrix.platform }} native UI
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-14
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: native-ui-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: native-ui-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Build debug app with embedded WebDriver
+        run: pnpm build:native-ui-test
+      - name: Run native UI smoke
+        run: pnpm test:native-ui
+      - name: Upload native UI artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: |
+            test-results/native-ui/
+            wdio-logs/
+          if-no-files-found: warn
+          retention-days: 14

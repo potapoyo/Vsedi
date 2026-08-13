@@ -13,7 +13,9 @@ use std::{
 };
 use tauri::AppHandle;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter};
+#[cfg(not(feature = "native-ui-test"))]
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{fmt, layer::SubscriberExt, reload, EnvFilter};
 use url::Url;
 
 const RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -51,26 +53,31 @@ pub fn initialize(app: &AppHandle) -> AppResult<WorkerGuard> {
     let level = normalize_log_level(&configured_level).unwrap_or("INFO");
     let filter = EnvFilter::new(level.to_ascii_lowercase());
     let (filter_layer, filter_handle) = reload::Layer::new(filter);
-    tracing_subscriber::registry()
+    let subscriber = tracing_subscriber::registry()
         .with(
             fmt::layer()
                 .with_writer(writer)
                 .with_ansi(false)
                 .with_target(false),
         )
-        .with(filter_layer)
-        .try_init()
-        .map_err(|error| {
-            AppError::with_detail(
-                ErrorCode::InternalError,
-                "アプリケーションログを初期化できませんでした。",
-                "initialize_logging",
-                error.to_string(),
-                false,
-            )
-        })?;
+        .with(filter_layer);
+    #[cfg(feature = "native-ui-test")]
+    let initialization = tracing::subscriber::set_global_default(subscriber);
+    #[cfg(not(feature = "native-ui-test"))]
+    let initialization = subscriber.try_init();
+    initialization.map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::InternalError,
+            "アプリケーションログを初期化できませんでした。",
+            "initialize_logging",
+            error.to_string(),
+            false,
+        )
+    })?;
     let updater: LogFilterUpdater = Box::new(move |filter| {
-        filter_handle.reload(filter).map_err(|error| error.to_string())
+        filter_handle
+            .reload(filter)
+            .map_err(|error| error.to_string())
     });
     *LOG_FILTER_UPDATER
         .get_or_init(|| Mutex::new(None))

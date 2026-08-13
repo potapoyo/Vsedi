@@ -8,6 +8,8 @@ type TestCases = { cases: Record<string, TestCase> };
 const casesPath = fileURLToPath(new URL("./ui-test-cases.json", import.meta.url));
 const cases = JSON.parse(readFileSync(casesPath, "utf8")) as TestCases;
 const selectedCase = process.env.UI_TEST_CASE?.trim();
+const testPlatform = process.env.UI_TEST_PLATFORM === "windows" ? "windows" : "macos";
+const testArchitecture = process.env.UI_TEST_ARCHITECTURE ?? (testPlatform === "windows" ? "x86_64" : "aarch64");
 
 if (selectedCase && !cases.cases[selectedCase]) {
   throw new Error(`Unknown UI test case: ${selectedCase}`);
@@ -55,7 +57,7 @@ function projectFixture(path: string) {
 }
 
 function installTauriMocks(page: Page) {
-  return page.addInitScript(({ projectPath, worldPath, initialSettings }) => {
+  return page.addInitScript(({ projectPath, worldPath, initialSettings, platform, architecture }) => {
     const settings = structuredClone(initialSettings);
     const projects = {
       [projectPath]: {
@@ -117,7 +119,14 @@ function installTauriMocks(page: Page) {
           const state = projects[currentPath] ?? projects[projectPath];
           switch (command) {
             case "inspect_environment":
-              return { platform: { os: "macos", architecture: "aarch64", supported: true }, git: { status: "AVAILABLE", executable: "/usr/bin/git", version: "git version 2.50.1" } };
+              return {
+                platform: { os: platform, architecture, supported: true },
+                git: {
+                  status: "AVAILABLE",
+                  executable: platform === "windows" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git",
+                  version: platform === "windows" ? "git version 2.47.0.windows.2" : "git version 2.50.1",
+                },
+              };
             case "load_settings":
               return {
                 settings,
@@ -162,7 +171,13 @@ function installTauriMocks(page: Page) {
         },
       },
     });
-  }, { projectPath: PROJECT_PATH, worldPath: WORLD_PATH, initialSettings: settingsFixture() });
+  }, {
+    projectPath: PROJECT_PATH,
+    worldPath: WORLD_PATH,
+    initialSettings: settingsFixture(),
+    platform: testPlatform,
+    architecture: testArchitecture,
+  });
 }
 
 async function prepare(page: Page) {
@@ -251,7 +266,7 @@ test("global-settings", async ({ page }, testInfo) => {
   await expect(page.getByRole("heading", { name: "新規repositoryの既定値" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "ignore template" })).toBeVisible();
   await page.getByRole("button", { name: "実行環境" }).click();
-  await expect(page.getByText("macos / aarch64")).toBeVisible();
+  await expect(page.getByText(`${testPlatform} / ${testArchitecture}`)).toBeVisible();
   await page.getByRole("button", { name: "ログと診断" }).click();
   await expect(page.getByRole("heading", { name: "ログと診断" })).toBeVisible();
   await expect(page.getByRole("button", { name: "ログ表示" })).toBeVisible();
