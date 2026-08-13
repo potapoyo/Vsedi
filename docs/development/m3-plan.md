@@ -25,17 +25,17 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 
 ## 再計画の前提
 
-2026-08-12に追加したWindows native UI workflowは、release executableのbuildとWebView2 / Edge WebDriverの準備までは成功したが、WebDriverの`POST /session`で`DevToolsActivePort file doesn't exist`となり、テスト本体を1件も開始できなかった。実行対象をcapabilityとserviceの両方へ明示した後も再現したため、native UI CIの調査は一旦中断している。
+2026-08-12に追加したWindows native UI workflowは、release executableのbuildとWebView2 / Edge WebDriverの準備までは成功したが、WebDriverの`POST /session`で`DevToolsActivePort file doesn't exist`となり、テスト本体を1件も開始できなかった。実行対象をcapabilityとserviceの両方へ明示した後も再現したため、native UI CIの調査を一旦中断した。2026-08-13に外部driverを使わないembedded WebDriver方式へ置き換え、Windows / macOSの両Actions jobで解消を確認した。
 
-この失敗はM3のRust / React実装に対するテスト失敗ではなく、Windows runner上でnative WebDriver sessionを作成できないテスト基盤の問題として扱う。ただし、native testが成功したことにもならないため、Windows native確認はInternal Alphaの未完了条件として残す。
+この失敗はM3のRust / React実装に対するテスト失敗ではなく、Windows runner上でnative WebDriver sessionを作成できない旧テスト基盤の問題として扱った。embedded方式でWindows native自動確認は完了したが、Windows installerを使う手動配布物smokeはInternal Alphaの未完了条件として残す。
 
 検証経路は混同せず、次の4層に分ける。
 
 | 層 | 役割 | 現在の状態 |
 | --- | --- | --- |
 | 通常CI | typecheck、frontend build、Rust test、Clippy、生成型整合性 | 利用可能 |
-| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | Windows / macOSのfixtureを分離した4ケースをローカルで成功。PR / 手動workflowを実装済み、Actions実行記録が未完了 |
-| Native UI test | WebView、Rust IPC、native windowを通る自動確認 | embedded WebDriver方式へ更新し、macOS実機で最小ケースが成功。Windows / macOS Actions実行が未完了 |
+| Playwright smoke | IPCをmockした主要画面とnavigationの確認 | Windows / macOSの各4ケースがローカルとGitHub Actionsで成功。OS別artifactも取得済み |
+| Native UI test | WebView、Rust IPC、native windowを通る自動確認 | embedded WebDriver方式でWindows / macOS Actionsが成功。実OS / System Gitのスクリーンショットを取得済み |
 | 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOS現行UIの`.app`は合格、DMG確認が未完了。Windowsは再ビルドとexe起動まで成功、GUI操作が未完了 |
 
 ## 現在地
@@ -53,13 +53,13 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | stale Project管理 | 実装済み・配布物での再確認待ち | 場所の再指定、一覧からの削除、重複登録防止を実装 |
 | repository固有設定 | 実装済み・配布物での詳細操作確認待ち | VPM overrideをsettings schema 5からschema 6へ引き継ぎ、診断・初期化で実効値を使用 |
 | ignore template・差分適用 | 実装済み・配布物での詳細操作確認待ち | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
-| UI smoke更新 | 実装・ローカル完了 | 現行UIの4ケースをWindows / macOS fixtureで各4件成功。PR / 手動workflowのActions実行は未記録 |
-| Windows native検証 | embedded方式のActions実行待ち・手動GUI未完了 | 旧external方式の`DevToolsActivePort`依存を廃止。新方式のWindows runner結果と配布物GUI操作が未完了 |
-| macOS最終native検証 | native自動テストと`.app`合格・DMG未完了 | embedded WebDriverで起動、全体設定、実OS / System Git表示を確認済み。現行UI DMGの生成・インストールが残る |
+| UI smoke更新 | 完了 | 現行UIの4ケースをWindows / macOS fixtureで各4件成功。Actions run `31661021590`とartifactを確認済み |
+| Windows native検証 | 自動テスト完了・手動配布物GUI未完了 | embedded方式のActions run `31661030671`が成功し、`windows / x86_64`とGit表示を確認。installerの詳細操作が残る |
+| macOS最終native検証 | native自動テストと`.app`合格・DMG未完了 | embedded方式のActionsと実機で起動、全体設定、実OS / System Git表示を確認済み。現行UI DMGが残る |
 
 ## 他PC向け引き継ぎ時点の残タスク
 
-最新の引き継ぎ基準は、リモートブランチ`codex/m3-local-save`の`839360a`（Windows GUI smoke test build result）とする。作業開始時は次で同期する。
+最新の引き継ぎ基準は、リモートブランチ`codex/m3-local-save`の先頭とする。作業開始時は次で同期する。
 
 ```sh
 git pull --ff-only origin codex/m3-local-save
@@ -69,10 +69,9 @@ git pull --ff-only origin codex/m3-local-save
 
 1. **Windows配布物GUI smoke** — 再生成したMSI / NSISの少なくとも一方（可能なら両方）をインストールし、環境診断、Project追加、初期化preview、現在の作業の保存、履歴・diff、タグ・設定、再起動後の復元を確認する。Computer Use helperの`EPERM`を解消できない場合は、Windows上の手動操作で代替し、スクリーンショットとログを記録する。
 2. **macOS現行UI DMG** — `bundle_dmg.sh`のエラーを解消または切り分け、現行UIのDMG生成・マウント・起動を確認する。`.app`の現行UI smokeは合格済み。
-3. **UI workflowの実行記録** — Playwrightとembedded native UIの両workflowをWindows / Apple Silicon macOSで実行し、テスト結果、スクリーンショット、driver / app logを確認する。失敗しても通常CIの必須checkにはしない。
-4. **M3完了判定と文書更新** — 両OSの配布物で`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。
+3. **M3完了判定と文書更新** — 両OSの配布物で`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。
 
-Windows native UI CIは旧external driver方式を廃止し、アプリ内のdebug限定embedded WebDriver方式へ更新した。配布物の手動GUI smokeとは独立して結果を記録し、Actionsで未検証の項目を成功扱いしない。
+Windows native UI CIは旧external driver方式を廃止し、アプリ内のdebug限定embedded WebDriver方式へ更新した。Actionsの自動確認と配布物の手動GUI smokeは独立した結果として記録する。
 
 ## 対象範囲
 
@@ -136,14 +135,14 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: 全体設定とrepository設定の責務がUIと保存形式の両方で一致し、設定画面を開いただけではrepositoryを変更しない。
 
-### Phase C — UI smoke testを現行画面へ追従させる（実装・ローカル完了、Actions実行待ち）
+### Phase C — UI smoke testを現行画面へ追従させる（完了）
 
 - `origin/main`のUI test基盤をM3 branchへ取り込み済み
 - JSONテストケースを、ホーム、Project選択、現在の作業、保存履歴、両設定画面、タグ編集・絞り込み・Project検索へ更新済み
 - Rust IPCをmockし、成功・empty・blocking errorを決定的に再現する4ケースをローカルで成功済み
 - WindowsとApple Silicon macOSで異なる実行環境fixtureを使い、ローカルで各4ケースを成功済み
 - `pull_request`と`workflow_dispatch`でWindows / macOS matrixを実行し、結果とPlaywright artifactを保持するworkflowへ更新済み
-- GitHub Actions上で両OSの実行結果とartifactを確認する
+- GitHub Actions run `31661021590`でmacOS 39秒、Windows 1分21秒で成功し、`ui-test-macos-1`と`ui-test-windows-1` artifactを確認済み
 
 完了条件: 両OSのPlaywright smokeが現行UIの主要navigationと表示を通過する。
 
@@ -157,16 +156,17 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: M3の状態変更と設定migrationに既知のデータ損失経路がなく、通常CIが成功する。
 
-### Phase E — Native UI CIを再開する（実装・macOSローカル完了、Actions実行待ち）
+### Phase E — Native UI CIを再開する（完了）
 
 - `@wdio/tauri-service`のembedded providerを採用し、WindowsのEdgeDriverとmacOSの外部driverへの依存を廃止した
 - `native-ui-test` Cargo feature、テスト専用Tauri設定、frontend pluginをdebug test buildだけへ分離した。通常buildではWDIOコード、権限、WebDriver serverを含めない
 - Windows / macOS matrixでdebug appをbuildし、起動、ホーム、全体設定、実行環境、System Gitを確認する手動workflowを実装した
 - 失敗時のスクリーンショットとWDIO / backend log、成功時の実行環境スクリーンショットをartifactへ保存する
 - Apple Silicon macOS実機でnative UI smoke 1件が成功した
-- GitHub Actions上でWindows / macOS jobを実行し、両方の結果とartifactを確認する
+- GitHub Actions run `31661030671`でmacOS 2分35秒、Windows 5分37秒で成功した
+- `native-ui-macos-1`と`native-ui-windows-1` artifactを取得し、成功スクリーンショットで`macos / aarch64`、`windows / x86_64`、System Gitが表示されることを確認した
 
-完了条件: Actions上の両OSでnative test本体が少なくとも1件成功し、失敗時にもdriver / app logとスクリーンショットを回収できる。安定するまでは通常CIの必須checkにしない。
+完了条件: 達成。Actions上の両OSでnative test本体が1件成功し、成功スクリーンショットとWDIO / backend logを回収できた。当面は通常CIの必須checkにはせず手動workflowとして維持する。
 
 ### Phase F — 両OSの配布物smokeとInternal Alpha判定
 
@@ -211,6 +211,6 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 5. Windowsが利用可能になった段階で配布物smokeを実施
 6. README、Diary、既知制約を更新してInternal Alpha判定
 
-Phase C（Playwright）とPhase E（native UI CI）はこの作業列から除外し、製品実装・ローカル検証・手動配布物確認が完了した後に別工程として再開する。
+Phase C（Playwright）とPhase E（native UI CI）は別工程として再開し、Windows / macOS Actionsで完了した。CIを除外した残作業列には、両OSの配布物smokeと文書更新だけが残る。
 
-Windows native CIの調査はPhase A〜Dを妨げない。driver調査が長期化した場合も、製品実装・通常CI・Playwright・手動native smokeの結果を個別に記録し、未確認項目を成功扱いしない。
+Windows native CIのdriver調査はembedded方式への移行で完了した。今後も製品実装、通常CI、Playwright、native自動テスト、手動配布物smokeの結果を個別に記録し、未確認項目を成功扱いしない。
