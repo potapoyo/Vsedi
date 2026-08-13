@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { emit } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -15,7 +16,17 @@ type AppRoute =
   | { page: "GLOBAL_SETTINGS"; section: GlobalSettingsSection }
   | { page: "REPOSITORY"; section: RepositorySection };
 
+let appReadySignaled = false;
+
 function App() {
+  useEffect(() => {
+    if (appReadySignaled) return;
+    appReadySignaled = true;
+    // Browser-based UI tests do not have the Tauri event bridge. The rejected
+    // promise is intentionally ignored so the same React entrypoint works there.
+    void emit("app-ready").catch(() => undefined);
+  }, []);
+
   if (currentWindowLabel() === "logs") return <LogWindow />;
   return <MainWindow />;
 }

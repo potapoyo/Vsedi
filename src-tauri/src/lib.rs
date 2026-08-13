@@ -8,7 +8,7 @@ pub mod services;
 pub mod settings;
 
 use logging::LogGuard;
-use tauri::Manager;
+use tauri::{Listener, Manager};
 
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -23,6 +23,20 @@ pub fn run() {
         .setup(|app| {
             let guard = logging::initialize(app.handle())?;
             app.manage(LogGuard::new(guard));
+
+            // Keep the main window hidden until the React shell has painted once.
+            // The static splash window is visible from startup and is replaced by
+            // the main window when the frontend emits `app-ready`.
+            let app_handle = app.handle().clone();
+            app.listen("app-ready", move |_| {
+                if let Some(main_window) = app_handle.get_webview_window("main") {
+                    let _ = main_window.show();
+                    let _ = main_window.set_focus();
+                }
+                if let Some(splash_window) = app_handle.get_webview_window("splashscreen") {
+                    let _ = splash_window.close();
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
