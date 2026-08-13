@@ -9,7 +9,7 @@ on:
         default: ""
   pull_request:
     paths:
-      - ".github/workflows/ui-test.yml"
+      - ".github/workflows/playwright-ui-test.yml"
       - "package.json"
       - "pnpm-lock.yaml"
       - "playwright.config.ts"
