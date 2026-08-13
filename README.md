@@ -110,6 +110,21 @@ pnpm tauri dev
 5. 「フォルダを選択」から Unity project のルートを選び、Unity project と Unity バージョンが表示されることを確認する。
 6. 終了するときは、ターミナルで `Ctrl+C` を押す。
 
+#### Windows の自動 native UI テスト
+
+実際のTauri executable、WebView2、Rust command、別ウィンドウを通すE2Eテストは、Windows上で次を実行します。
+
+```powershell
+pnpm build
+cargo build --release --manifest-path src-tauri/Cargo.toml
+pnpm typecheck:ui:native
+pnpm test:ui:native:windows
+```
+
+GitHub Actionsでは `Native UI Test (Windows)` を開き、`Run workflow` から対象ブランチを選ぶと同じテストを手動実行できます。各テストのスクリーンショットは `native-ui-test-windows` Artifact に保存されます。
+
+日常的なfrontend確認には、Tauri IPCをモックして高速に実行する `pnpm test:ui` を使用します。
+
 #### Windows の native build
 
 ```powershell

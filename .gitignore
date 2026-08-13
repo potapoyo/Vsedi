@@ -1,6 +1,9 @@
 node_modules/
 .pnpm-store/
 dist/
+playwright-report/
+test-results/
+wdio-results/
 src-tauri/target/
 .DS_Store
 *.log

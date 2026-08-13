@@ -1,0 +1,58 @@
+name: Native UI Test (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  native-ui-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: native-ui-windows-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Typecheck native UI tests
+        run: pnpm typecheck:ui:native
+
+      - name: Build Tauri executable
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Run native UI tests
+        run: pnpm test:ui:native:windows
+
+      - name: Upload native UI test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-test-windows
+          path: wdio-results/
+          if-no-files-found: warn
+          retention-days: 14

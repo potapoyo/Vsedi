@@ -36,6 +36,12 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.8.0
         version: 2.11.4
+      '@types/mocha':
+        specifier: ^10.0.10
+        version: 10.0.10
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
       '@types/react':
         specifier: ^19.1.10
         version: 19.2.18
