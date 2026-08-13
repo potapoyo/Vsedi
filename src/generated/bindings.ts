@@ -48,6 +48,13 @@ export type ChangedFile = { path: string, oldPath: string | null, changeKind: Ch
 
 export type WorktreeSnapshot = { statusToken: string, files: Array<ChangedFile>, hasConflicts: boolean, hasExistingStagedChanges: boolean, };
 
+/**
+ * Git管理対象のファイルツリー。変更がないファイルは`change_kind`がNoneになる。
+ */
+export type RepositoryTreeFile = { path: string, oldPath: string | null, changeKind: ChangeKind | null, staged: boolean, unstaged: boolean, binary: boolean, outsideProject: boolean, };
+
+export type RepositoryTreeSnapshot = { statusToken: string, files: Array<RepositoryTreeFile>, };
+
 export type IgnoreFilePreview = { path: string, missingRules: Array<string>, willCreate: boolean, };
 
 export type RepositoryInitializationPreview = { statusToken: string, repositoryRoot: string, canInitialize: boolean, blockingReason: string | null, ignoreFiles: Array<IgnoreFilePreview>, };
@@ -59,6 +66,12 @@ export type ApplyIgnoreRulesRequest = { projectPath: string, statusToken: string
 export type InitializeRepositoryRequest = { projectPath: string, statusToken: string, };
 
 export type SaveRequest = { projectPath: string, statusToken: string, memo: string, };
+
+export type GitCommandPhase = "STARTED" | "OUTPUT" | "COMPLETED";
+
+export type GitOutputStream = "STDOUT" | "STDERR";
+
+export type GitCommandEvent = { operation: string, executable: string, args: Array<string>, phase: GitCommandPhase, stream: GitOutputStream | null, text: string, status: number | null, };
 
 export type SaveResult = { commitId: string, shortCommitId: string, memo: string, authorTime: string, fileCount: number, };
 

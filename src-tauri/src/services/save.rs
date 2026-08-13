@@ -1,7 +1,7 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
-    git::{command::run_git, diagnostics},
-    models::{SaveRequest, SaveResult},
+    git::{command::run_git_streaming, diagnostics},
+    models::{GitCommandEvent, GitCommandPhase, GitOutputStream, SaveRequest, SaveResult},
     platform::process::find_executable,
     services::worktree,
 };
@@ -9,6 +9,13 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 pub fn save(request: SaveRequest) -> AppResult<SaveResult> {
+    save_with_progress(request, |_| {})
+}
+
+pub fn save_with_progress<F>(request: SaveRequest, mut progress: F) -> AppResult<SaveResult>
+where
+    F: FnMut(GitCommandEvent),
+{
     debug!(operation = "save_worktree", project_path = %request.project_path, "worktree save started");
     let memo = request.memo.trim();
     if memo.is_empty() {
@@ -45,7 +52,7 @@ pub fn save(request: SaveRequest) -> AppResult<SaveResult> {
         );
         return Err(AppError::simple(
             ErrorCode::RepositoryStateChanged,
-            "表示後に変更内容が変わりました。もう一度確認してから保存してください。",
+            "保存前に変更内容が変わったため、保存を停止しました。最新の変更を確認してから、もう一度保存してください。",
             "save_worktree",
         ));
     }
@@ -90,15 +97,16 @@ pub fn save(request: SaveRequest) -> AppResult<SaveResult> {
         file_count = snapshot.files.len(),
         "saving worktree changes"
     );
-    let add = run_git(&git, &["add", "-A"], Some(&root)).map_err(|error| {
-        AppError::with_detail(
-            ErrorCode::SaveAddFailed,
-            "変更を保存準備できませんでした。",
-            "git_add",
-            error.to_string(),
-            false,
-        )
-    })?;
+    let add =
+        run_git_with_progress(&git, &["add", "-A"], &root, &mut progress).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SaveAddFailed,
+                "変更を保存準備できませんでした。",
+                "git_add",
+                error.to_string(),
+                false,
+            )
+        })?;
     if add.status != Some(0) {
         return Err(AppError::with_detail(
             ErrorCode::SaveAddFailed,
@@ -108,15 +116,16 @@ pub fn save(request: SaveRequest) -> AppResult<SaveResult> {
             true,
         ));
     }
-    let commit = run_git(&git, &["commit", "-m", memo], Some(&root)).map_err(|error| {
-        AppError::with_detail(
+    let commit = run_git_with_progress(&git, &["commit", "-m", memo], &root, &mut progress)
+        .map_err(|error| {
+            AppError::with_detail(
             ErrorCode::SaveCommitFailed,
             "保存 commit を作成できませんでした。変更が保存準備済みになっている可能性があります。",
             "git_commit",
             error.to_string(),
             true,
         )
-    })?;
+        })?;
     if commit.status != Some(0) {
         return Err(AppError::with_detail(
             ErrorCode::SaveCommitFailed,
@@ -131,12 +140,14 @@ pub fn save(request: SaveRequest) -> AppResult<SaveResult> {
         &["rev-parse", "HEAD"],
         &root,
         "commit ID を確認できませんでした。",
+        &mut progress,
     )?;
     let author_time = git_required_text(
         &git,
         &["show", "-s", "--format=%aI", "HEAD"],
         &root,
         "保存時刻を確認できませんでした。",
+        &mut progress,
     )?;
     let result = SaveResult {
         short_commit_id: commit_id.chars().take(8).collect(),
@@ -172,8 +183,9 @@ fn git_required_text(
     args: &[&str],
     root: &Path,
     message: &'static str,
+    progress: &mut impl FnMut(GitCommandEvent),
 ) -> AppResult<String> {
-    let output = run_git(git, args, Some(root)).map_err(|error| {
+    let output = run_git_with_progress(git, args, root, progress).map_err(|error| {
         AppError::with_detail(
             ErrorCode::SaveCommitFailed,
             message,
@@ -193,6 +205,48 @@ fn git_required_text(
         ));
     }
     Ok(value.to_owned())
+}
+
+fn run_git_with_progress(
+    executable: &Path,
+    args: &[&str],
+    root: &Path,
+    progress: &mut impl FnMut(GitCommandEvent),
+) -> std::io::Result<crate::platform::process::ProcessOutput> {
+    let event_args = args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+    progress(GitCommandEvent {
+        operation: "save_worktree".to_owned(),
+        executable: executable.display().to_string(),
+        args: event_args.clone(),
+        phase: GitCommandPhase::Started,
+        stream: None,
+        text: String::new(),
+        status: None,
+    });
+    let output = run_git_streaming(executable, args, Some(root), |stream, text| {
+        progress(GitCommandEvent {
+            operation: "save_worktree".to_owned(),
+            executable: executable.display().to_string(),
+            args: event_args.clone(),
+            phase: GitCommandPhase::Output,
+            stream: Some(match stream {
+                crate::platform::process::ProcessStream::Stdout => GitOutputStream::Stdout,
+                crate::platform::process::ProcessStream::Stderr => GitOutputStream::Stderr,
+            }),
+            text,
+            status: None,
+        });
+    });
+    progress(GitCommandEvent {
+        operation: "save_worktree".to_owned(),
+        executable: executable.display().to_string(),
+        args: event_args,
+        phase: GitCommandPhase::Completed,
+        stream: None,
+        text: String::new(),
+        status: output.as_ref().ok().and_then(|result| result.status),
+    });
+    output
 }
 
 #[cfg(test)]
@@ -249,12 +303,25 @@ mod tests {
         git(&root, &["config", "user.email", "test@example.invalid"]);
         fs::write(root.join("scene with space.txt"), "saved\n").unwrap();
         let snapshot = worktree::read_worktree_snapshot(root.to_str().unwrap()).unwrap();
-        let result = save(SaveRequest {
-            project_path: root.to_string_lossy().into_owned(),
-            status_token: snapshot.status_token,
-            memo: "初回保存".to_owned(),
-        })
+        let mut events = Vec::new();
+        let result = save_with_progress(
+            SaveRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                status_token: snapshot.status_token,
+                memo: "初回保存".to_owned(),
+            },
+            |event| events.push(event),
+        )
         .unwrap();
+        assert!(events.iter().any(|event| {
+            event.phase == GitCommandPhase::Started && event.args == ["commit", "-m", "初回保存"]
+        }));
+        assert!(events
+            .iter()
+            .any(|event| { event.phase == GitCommandPhase::Output && !event.text.is_empty() }));
+        assert!(events
+            .iter()
+            .any(|event| event.phase == GitCommandPhase::Completed && event.status == Some(0)));
         assert_eq!(result.file_count, 1);
         assert_eq!(result.memo, "初回保存");
         assert_eq!(result.commit_id.len(), 40);

@@ -13,6 +13,7 @@ import type {
   RepositoryInitializationPreview,
   RepositoryIgnorePreview,
   ApplyIgnoreRulesRequest,
+  RepositoryTreeSnapshot,
   SettingsLoadResult,
   SaveRequest,
   SaveResult,
@@ -33,6 +34,10 @@ export function readRepositoryState(projectPath: string) {
 
 export function readWorktreeSnapshot(projectPath: string) {
   return invoke<WorktreeSnapshot>("read_worktree_snapshot", { projectPath });
+}
+
+export function readRepositoryTree(projectPath: string) {
+  return invoke<RepositoryTreeSnapshot>("read_repository_tree", { projectPath });
 }
 
 export function previewRepositoryInitialization(projectPath: string) {

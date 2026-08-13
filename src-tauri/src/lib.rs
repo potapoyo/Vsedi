@@ -53,6 +53,7 @@ pub fn run() {
             commands::diff::read_commit_diff,
             commands::worktree::read_repository_state,
             commands::worktree::read_worktree_snapshot,
+            commands::worktree::read_repository_tree,
             commands::settings::load_settings,
             commands::settings::save_settings,
             commands::logging::export_diagnostic_log,

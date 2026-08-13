@@ -283,9 +283,15 @@ fn append_rules(path: &Path, rules: &[String]) -> std::io::Result<()> {
     }
     next.push_str("# Added by Vsedi for Unity project files");
     next.push_str(newline);
+    let mut previous_was_comment = true;
     for rule in rules {
+        let is_comment = rule.trim_start().starts_with('#');
+        if is_comment && !previous_was_comment {
+            next.push_str(newline);
+        }
         next.push_str(rule);
         next.push_str(newline);
+        previous_was_comment = is_comment;
     }
     fs::write(path, next)
 }
@@ -352,6 +358,44 @@ mod tests {
         let value = fs::read_to_string(&path).unwrap();
         assert!(value.starts_with("custom\r\n\r\n"));
         assert!(value.contains("/[Ll]ibrary/\r\n"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preserves_blank_lines_before_ignore_sections() {
+        let root = std::env::temp_dir().join(format!(
+            "vsedi-init-spacing-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(".gitignore");
+        append_rules(
+            &path,
+            &[
+                "first-cache/".to_owned(),
+                "# Section comment.".to_owned(),
+                "second-cache/".to_owned(),
+                "# Related comment.".to_owned(),
+                "third-cache/".to_owned(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            concat!(
+                "# Added by Vsedi for Unity project files\n",
+                "first-cache/\n",
+                "\n",
+                "# Section comment.\n",
+                "second-cache/\n",
+                "\n",
+                "# Related comment.\n",
+                "third-cache/\n",
+            )
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

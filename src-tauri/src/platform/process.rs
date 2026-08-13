@@ -1,8 +1,10 @@
 use std::{
     ffi::OsString,
-    io,
+    io::{self, BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    sync::mpsc,
+    thread,
 };
 use tracing::trace;
 
@@ -11,6 +13,12 @@ pub struct ProcessOutput {
     pub status: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProcessStream {
+    Stdout,
+    Stderr,
 }
 
 pub fn find_executable(name: &str) -> Option<PathBuf> {
@@ -78,6 +86,116 @@ pub(crate) fn run(
         "external process completed"
     );
     Ok(process_output)
+}
+
+pub(crate) fn run_streaming<F>(
+    executable: &Path,
+    args: &[&str],
+    current_dir: Option<&Path>,
+    mut on_output: F,
+) -> io::Result<ProcessOutput>
+where
+    F: FnMut(ProcessStream, String),
+{
+    trace!(
+        operation = "run_process_streaming",
+        executable = %executable.display(),
+        arg_count = args.len(),
+        current_dir = ?current_dir.map(Path::display),
+        "streaming external process started"
+    );
+    let mut command = Command::new(executable);
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(directory) = current_dir {
+        command.current_dir(directory);
+    }
+    let mut child = command.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("failed to capture process stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("failed to capture process stderr"))?;
+    let (sender, receiver) = mpsc::channel();
+    let stdout_sender = sender.clone();
+    let stdout_thread =
+        thread::spawn(move || read_stream(stdout, ProcessStream::Stdout, stdout_sender));
+    let stderr_thread = thread::spawn(move || read_stream(stderr, ProcessStream::Stderr, sender));
+
+    let mut stdout_text = String::new();
+    let mut stderr_text = String::new();
+    let mut read_error = None;
+    for message in receiver {
+        match message {
+            StreamMessage::Output(stream, text) => {
+                match stream {
+                    ProcessStream::Stdout => stdout_text.push_str(&text),
+                    ProcessStream::Stderr => stderr_text.push_str(&text),
+                }
+                on_output(stream, text);
+            }
+            StreamMessage::Error(stream, error) => {
+                read_error = Some(format!("{stream:?}: {error}"));
+            }
+        }
+    }
+    let status = child.wait()?.code();
+    join_stream_thread(stdout_thread)?;
+    join_stream_thread(stderr_thread)?;
+    if let Some(error) = read_error {
+        return Err(io::Error::other(error));
+    }
+    let process_output = ProcessOutput {
+        status,
+        stdout: stdout_text,
+        stderr: stderr_text,
+    };
+    trace!(
+        operation = "run_process_streaming",
+        executable = %executable.display(),
+        status = ?process_output.status,
+        "streaming external process completed"
+    );
+    Ok(process_output)
+}
+
+enum StreamMessage {
+    Output(ProcessStream, String),
+    Error(ProcessStream, String),
+}
+
+fn read_stream<R: Read>(reader: R, stream: ProcessStream, sender: mpsc::Sender<StreamMessage>) {
+    let mut reader = BufReader::new(reader);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                if sender
+                    .send(StreamMessage::Output(stream, line.clone()))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            Err(error) => {
+                let _ = sender.send(StreamMessage::Error(stream, error.to_string()));
+                break;
+            }
+        }
+    }
+}
+
+fn join_stream_thread(thread: thread::JoinHandle<()>) -> io::Result<()> {
+    thread
+        .join()
+        .map_err(|_| io::Error::other("process output reader thread panicked"))
 }
 
 pub(crate) fn open_directory(path: &Path) -> io::Result<()> {

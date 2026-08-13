@@ -1,7 +1,20 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 6;
+pub const CURRENT_SCHEMA_VERSION: u32 = 7;
+
+pub const DEFAULT_OS_IGNORE_RULES: &[&str] = &[
+    ".DS_Store",
+    ".AppleDouble",
+    ".LSOverride",
+    "._*",
+    ".Spotlight-V100",
+    ".Trashes",
+    ".fseventsd",
+    "Thumbs.db",
+    "ehthumbs.db",
+    "Desktop.ini",
+];
 
 pub const DEFAULT_UNITY_IGNORE_RULES: &[&str] = &[
     "/[Ll]ibrary/*",
@@ -14,6 +27,20 @@ pub const DEFAULT_UNITY_IGNORE_RULES: &[&str] = &[
     "/[Ll]ogs/",
     "/[Uu]ser[Ss]ettings/",
     "*.log",
+    "",
+    "# macOS",
+    ".DS_Store",
+    ".AppleDouble",
+    ".LSOverride",
+    "._*",
+    ".Spotlight-V100",
+    ".Trashes",
+    ".fseventsd",
+    "",
+    "# Windows",
+    "Thumbs.db",
+    "ehthumbs.db",
+    "Desktop.ini",
     "",
     "# By default Unity supports Blender asset imports; backup files do not need version control.",
     "*.blend1",

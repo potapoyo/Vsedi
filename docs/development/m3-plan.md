@@ -44,7 +44,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | --- | --- | --- |
 | repository境界・Git診断 | 完了 | project自身のrepositoryと親repositoryを区別する |
 | 初期化preview | 完了 | 既存ignoreを置換せず、不足ruleだけを提示・追記する |
-| status・worktree diff | 完了 | rename、binary、conflict、project外変更を扱う |
+| status・worktree diff | 完了 | rename、binary、conflict、project外変更を扱い、未保存・保存済み・保存停止中の状態を色分けして表示する |
 | 作業保存 | 完了 | TOCTOU、既存staged、conflict、二重実行を防止する |
 | 保存履歴・commit詳細 | 完了 | text / binary / unavailable / truncatedを区別する |
 | application log | 完了 | 5段階のlevelと保持期間内の全ログ表示を実装済み |
@@ -77,9 +77,11 @@ Windows native UI CIは旧external driver方式を廃止し、アプリ内のdeb
 
 - Git repositoryの初期化previewと実行
 - ユーザーが編集可能なUnity / VPM ignore templateと、不足ruleのpreview・追記
-- repository全体の変更状態とfile diffの読み取り
-- 保存メモ、`add`、`commit`、保存直前の再検証
-- commit履歴、commit詳細、変更file、表示可能なdiff
+- repository全体の変更状態とfile diffの読み取り、手動再読込、Finder風の変更ファイルツリー表示、変更のみ / フォルダ内全体の切り替え、列幅調整
+- 現在の作業のproject・保存状態・診断サマリーの折りたたみと異常時自動展開
+- Project画面の共通ヘッダー省略と、サイドバーの選択中Project枠表示
+- 保存メモ、`add`、`commit`、保存直前の再検証、保存中のGit CLI進捗表示
+- Finder風の細いcommit履歴一覧、列幅を調整できるcommit詳細の変更ファイルツリー、表示可能なdiff
 - 管理Project一覧、最終更新順、複数タグ設定・タグ絞り込み・Project検索
 - ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定の分離
 - 全体のVPM既定値とrepository固有override
@@ -116,7 +118,7 @@ Windows native UI CIは旧external driver方式を廃止し、アプリ内のdeb
 ### Phase A — 現在の製品差分を確定する（実装・ローカル検証済み）
 
 - 管理Project一覧、最終更新順、タグ編集・解除・絞り込み・検索を実装・review済み
-- schema 1〜5からschema 6へのmigrationと、単一カテゴリからタグへの変換、破損・未来schemaの拒否を実装・テスト済み
+- schema 1〜5からschema 6へのmigration、schema 7でのOS生成ファイルignore rule追加と、単一カテゴリからタグへの変換、破損・未来schemaの拒否を実装・テスト済み
 - stale pathの表示、再指定、削除、重複登録防止を実装・配布物で確認済み
 - 通常CI相当のRust test、Clippy、typecheck、production build、生成型差分チェックを複数回成功済み
 

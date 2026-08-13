@@ -8,6 +8,22 @@
       "title": "現在の作業から保存履歴・diffまで",
       "screenshot": true
     },
+    "repository-work-expands-summary-on-abnormal-state": {
+      "title": "現在の作業サマリーの折りたたみと異常時展開",
+      "screenshot": false
+    },
+    "repository-work-shows-save-progress": {
+      "title": "保存中の処理状態とGit CLIレスポンス",
+      "screenshot": false
+    },
+    "repository-work-refreshes-changes": {
+      "title": "現在の変更の手動再読込",
+      "screenshot": false
+    },
+    "repository-work-toggles-file-view": {
+      "title": "変更ファイルの表示範囲切り替え",
+      "screenshot": false
+    },
     "repository-settings": {
       "title": "リポジトリ設定のタグ・VPM方針",
       "screenshot": true
