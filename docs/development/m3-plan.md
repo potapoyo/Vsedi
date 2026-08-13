@@ -95,6 +95,7 @@ Windows native UI CIは旧external driver方式を廃止し、アプリ内のdeb
 - file単位の保存対象選択
 - amend、履歴書換え、commit削除
 - 過去状態への復元（M4）
+- WebView描画待ち中の起動スプラッシュ（M4以降のUX改善）
 - Git LFS診断
 - UI testを毎commitで自動実行する運用
 
@@ -200,6 +201,24 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 - Windows / macOSのPlaywright smokeが現行画面で成功する
 - macOSとWindowsの配布物でinit→save→history→detailのnative smokeに合格する
 - native UI CIが未安定の場合、その事実を既知制約として残し、手動native smokeでInternal Alpha判定を補完する
+
+## 後続UX改善計画 — WebView起動スプラッシュ
+
+DMG同梱アプリの確認時、プロセス起動直後にWebViewの描画が完了するまで一時的な白画面が表示された。M3では機能確認を優先し、起動スプラッシュは後続のUX改善として扱う。
+
+### 計画
+
+1. Tauriのネイティブウィンドウ生成直後に表示できる、静的なスプラッシュ画面を用意する。アプリ名、ロゴ、読み込み中表示を含め、WebViewのReact画面には依存させない。
+2. Reactアプリの初期化完了を通知するready handshakeを設計し、スプラッシュからホーム画面へ一度だけ切り替える。切り替え時のちらつきと二重初期化を防ぐ。
+3. Rust command、settings読み込み、store復元などの初期化失敗時は、無期限にスプラッシュを表示せず、再試行または診断情報を含むエラー画面へ遷移する。
+4. Apple Silicon macOSの`.app` / DMG、Windowsのexe / installer、GitHub Actions native UI testで、低速起動・通常起動・初期化失敗の3状態を確認する。
+
+### 完了条件
+
+- WebView描画待ち中に白画面を表示せず、ブランド付きスプラッシュが表示される
+- React画面の描画完了後にスプラッシュが確実に消え、ホーム画面を操作できる
+- 初期化失敗時にスプラッシュが停止せず、ユーザーが再試行または診断へ進める
+- 起動時間、ready handshake、失敗理由がログへ安全に記録され、機微情報を含めない
 
 ## CIを除外した実行順序
 
