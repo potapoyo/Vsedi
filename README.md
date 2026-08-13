@@ -22,7 +22,7 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）に加え、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装中です。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md) を参照してください。
+Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装・検証済みです。Windows / Apple Silicon macOSの配布物確認まで完了しています。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md)、別マシン向けの手順は [`docs/development/handoff.md`](docs/development/handoff.md) を参照してください。
 
 ### `.gitignore` 初期ルールのカスタマイズ
 
@@ -44,6 +44,7 @@ Vsedi が新規 repository を初期化するときに提案する `.gitignore` 
 - [`docs/design/architecture.md`](docs/design/architecture.md) — アーキテクチャと権限境界
 - [`docs/development/requirements.md`](docs/development/requirements.md) — MVP / 製品要件
 - [`docs/development/roadmap.md`](docs/development/roadmap.md) — 開発フェーズ
+- [`docs/development/handoff.md`](docs/development/handoff.md) — 別マシンへの引き継ぎ手順
 - [`docs/adr/`](docs/adr/) — アーキテクチャ判断記録（ADR）
 
 ## 開発コマンド
