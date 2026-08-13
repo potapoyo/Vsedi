@@ -36,7 +36,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | 通常CI | typecheck、frontend build、Rust test、Clippy、生成型整合性 | 利用可能 |
 | Playwright smoke | IPCをmockした主要画面とnavigationの確認 | Windows / macOSの各4ケースがローカルとGitHub Actionsで成功。OS別artifactも取得済み |
 | Native UI test | WebView、Rust IPC、native windowを通る自動確認 | embedded WebDriver方式でWindows / macOS Actionsが成功。実OS / System Gitのスクリーンショットを取得済み |
-| 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOS現行UIの`.app`は合格、DMG確認が未完了。Windowsは再ビルドとexe起動まで成功、GUI操作が未完了 |
+| 配布物smoke | `.app` / DMG、Windows app / installerの実機確認 | macOS現行UIの`.app`とApple Silicon DMGは合格。Windowsは再ビルドとexe起動まで成功、installerのGUI操作が未完了 |
 
 ## 現在地
 
@@ -55,7 +55,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 | ignore template・差分適用 | 実装済み・配布物での詳細操作確認待ち | 全体設定で編集し、repository設定で不足ruleをpreviewして追加 |
 | UI smoke更新 | 完了 | 現行UIの4ケースをWindows / macOS fixtureで各4件成功。Actions run `31661021590`とartifactを確認済み |
 | Windows native検証 | 自動テスト完了・手動配布物GUI未完了 | embedded方式のActions run `31661030671`が成功し、`windows / x86_64`とGit表示を確認。installerの詳細操作が残る |
-| macOS最終native検証 | native自動テストと`.app`合格・DMG未完了 | embedded方式のActionsと実機で起動、全体設定、実OS / System Git表示を確認済み。現行UI DMGが残る |
+| macOS最終native検証 | 完了 | embedded方式のActions、実機`.app`、Apple Silicon DMG同梱`.app`で起動、全体設定、実OS / System Git表示を確認済み |
 
 ## 他PC向け引き継ぎ時点の残タスク
 
@@ -68,8 +68,7 @@ git pull --ff-only origin codex/m3-local-save
 優先順は次のとおり。
 
 1. **Windows配布物GUI smoke** — 再生成したMSI / NSISの少なくとも一方（可能なら両方）をインストールし、環境診断、Project追加、初期化preview、現在の作業の保存、履歴・diff、タグ・設定、再起動後の復元を確認する。Computer Use helperの`EPERM`を解消できない場合は、Windows上の手動操作で代替し、スクリーンショットとログを記録する。
-2. **macOS現行UI DMG** — `bundle_dmg.sh`のエラーを解消または切り分け、現行UIのDMG生成・マウント・起動を確認する。`.app`の現行UI smokeは合格済み。
-3. **M3完了判定と文書更新** — 両OSの配布物で`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。
+2. **M3完了判定と文書更新** — Windows installerで`init → save → history → detail`を確認した後、README、roadmap、既知制約、M3計画の状態を更新し、Internal Alpha候補を判定する。macOS DMGの生成・マウント・起動は完了済み。
 
 Windows native UI CIは旧external driver方式を廃止し、アプリ内のdebug限定embedded WebDriver方式へ更新した。Actionsの自動確認と配布物の手動GUI smokeは独立した結果として記録する。
 
@@ -170,7 +169,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 ### Phase F — 両OSの配布物smokeとInternal Alpha判定
 
-- Apple Silicon macOSでは現行UIの`.app`でinit→save→history→detailを確認済み。現行UI DMGの生成・マウント・起動を確認する
+- Apple Silicon macOSでは現行UIの`.app`でinit→save→history→detailを確認済み。現行UI DMGを生成し、読み取り専用マウント、同梱`.app`の起動、実行環境・System Git表示、終了、取り外しまで確認済み
 - Windowsでは再ビルド、MSI / NSIS生成、`vsedi.exe`の直接起動まで確認済み。installerのインストールと同じ中心導線を確認する
 - native UI自動化で未検証のOS統合は手動チェックリストで補い、結果を日記へ記録する
 - README、architecture、roadmap、既知制約を実装結果へ更新する
@@ -207,10 +206,10 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 1. Phase A: 管理Project・タグ・検索差分を確定
 2. Phase B: repository固有設定を完成
 3. Phase D: 製品機能のローカル回帰検証を完成
-4. Phase F: Macのロック解除後に現行UIの配布物smokeを実施
-5. Windowsが利用可能になった段階で配布物smokeを実施
+4. Phase F: macOS現行UIのDMG配布物smokeを実施（完了）
+5. Windowsが利用可能になった段階でinstaller配布物smokeを実施
 6. README、Diary、既知制約を更新してInternal Alpha判定
 
-Phase C（Playwright）とPhase E（native UI CI）は別工程として再開し、Windows / macOS Actionsで完了した。CIを除外した残作業列には、両OSの配布物smokeと文書更新だけが残る。
+Phase C（Playwright）とPhase E（native UI CI）は別工程として再開し、Windows / macOS Actionsで完了した。CIを除外した残作業列には、Windows installer配布物smokeと文書更新だけが残る。
 
 Windows native CIのdriver調査はembedded方式への移行で完了した。今後も製品実装、通常CI、Playwright、native自動テスト、手動配布物smokeの結果を個別に記録し、未確認項目を成功扱いしない。
