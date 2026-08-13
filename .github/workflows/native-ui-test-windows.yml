@@ -1,4 +1,4 @@
-name: Native UI Test
+name: Native UI Test — Tauri / WDIO (Windows / macOS)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   native-ui-test:
-    name: ${{ matrix.platform }} native UI
+    name: Tauri native UI — ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:

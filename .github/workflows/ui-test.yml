@@ -1,4 +1,4 @@
-name: UI Test
+name: UI Test — Playwright (Windows / macOS)
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   ui-test:
-    name: ${{ matrix.os }} / Chromium
+    name: Playwright — ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
