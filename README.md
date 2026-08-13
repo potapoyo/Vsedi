@@ -22,7 +22,19 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の基盤とM2のproject診断を実装中です。Rust 側の command boundary、Git環境診断、Unity / VRChat / VPM診断、設定保全、構造化ログ、生成型、最小 UI を含みます。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md) を参照してください。
+Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）に加え、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装中です。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md) を参照してください。
+
+### `.gitignore` 初期ルールのカスタマイズ
+
+Vsedi が新規 repository を初期化するときに提案する `.gitignore` ルールは、全体設定の `ignore template` から編集でき、アプリデータフォルダ内の `settings.json` の `ignoreTemplates` で管理します。`unityRules` は project root の `.gitignore`、`vpmExcludeRules` は VPM package を除外する設定時の `Packages/.gitignore` に対する候補です。
+
+既存repositoryの「リポジトリ設定」では、現在のignoreとの差分を確認してから不足ruleだけを明示的に追加できます。既存 `.gitignore` は置換・削除されず、改行形式も保持します。設定変更だけではrepository内のファイルを変更しません。
+
+既定の `unityRules` は、GitHub の [Unity テンプレート](https://github.com/github/gitignore/blob/main/Unity.gitignore)へ、Vsedi利用者向けの `Library/metadata` と `Library/assetDatabase3` の保持ルールを統合したものです。
+
+### ログレベルとログ表示
+
+メイン画面の「ログ設定」から `ERROR` / `WARN` / `INFO` / `DEBUG` / `TRACE` を選択できます。変更は即時適用され、`settings.json` の `logLevel` に保存されます。ログ表示ウィンドウは、30日保持の対象になっているサニタイズ済みログを現在はすべて表示します。
 
 ## ドキュメント
 

@@ -1,7 +1,14 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
-    models::{AppSettings, RecentProjectStatus, SettingsLoadResult, CURRENT_SCHEMA_VERSION},
+    git::diagnostics,
+    logging,
+    models::{
+        AppSettings, RecentProjectStatus, RepositorySettings, SettingsLoadResult,
+        VpmTrackingPolicy, CURRENT_SCHEMA_VERSION,
+    },
     platform::paths::app_data_dir,
+    platform::process::find_executable,
+    services::projects,
     settings::migration::migrate,
 };
 use serde_json::{json, Value};
@@ -25,7 +32,18 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
         )
     })?;
     let path = directory.join("settings.json");
-    let (settings, recovered, backup_path) = load_file(&path)?;
+    let (mut settings, recovered, backup_path) = load_file(&path)?;
+    let normalized_log_level = logging::normalize_log_level(&settings.log_level).unwrap_or("INFO");
+    if settings.log_level != normalized_log_level {
+        warn!(
+            operation = "normalize_log_level",
+            configured_level = %settings.log_level,
+            fallback_level = normalized_log_level,
+            "invalid log level was replaced with INFO"
+        );
+        settings.log_level = normalized_log_level.to_owned();
+    }
+    logging::set_log_level(&settings.log_level)?;
 
     // The plugin store is the runtime persistence backend. The preflight above keeps
     // manual recovery and migration rules explicit before the store reads the file.
@@ -48,15 +66,29 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
         )
     })?;
 
-    let recent_projects = settings
+    let mut recent_projects = settings
         .recent_projects
         .iter()
-        .map(|project| RecentProjectStatus {
-            path: project.path.clone(),
-            last_opened_at: project.last_opened_at.clone(),
-            exists: Path::new(&project.path).is_dir(),
+        .map(|project| {
+            let exists = Path::new(&project.path).is_dir();
+            let project_kind = if exists {
+                let policy = resolve_vpm_tracking_policy_for_project(&settings, &project.path);
+                projects::inspect_project(&project.path, policy)
+                    .ok()
+                    .map(|diagnostic| diagnostic.project_kind)
+            } else {
+                None
+            };
+            RecentProjectStatus {
+                path: project.path.clone(),
+                last_opened_at: project.last_opened_at.clone(),
+                tags: project.tags.clone(),
+                exists,
+                project_kind,
+            }
         })
-        .collect();
+        .collect::<Vec<_>>();
+    sort_recent_projects(&mut recent_projects);
     Ok(SettingsLoadResult {
         settings,
         recovered,
@@ -65,7 +97,7 @@ pub fn load(app: &AppHandle) -> AppResult<SettingsLoadResult> {
     })
 }
 
-pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
+pub fn save(app: &AppHandle, mut settings: AppSettings) -> AppResult<()> {
     if settings.schema_version != CURRENT_SCHEMA_VERSION {
         return Err(AppError::simple(
             ErrorCode::SettingsUnsupportedSchema,
@@ -73,6 +105,17 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             "validate_settings_before_save",
         ));
     }
+    let log_level = logging::normalize_log_level(&settings.log_level).ok_or_else(|| {
+        AppError::simple(
+            ErrorCode::SettingsInvalidLogLevel,
+            "ログレベルは ERROR / WARN / INFO / DEBUG / TRACE のいずれかを指定してください。",
+            "validate_settings_before_save",
+        )
+    })?;
+    for project in &mut settings.recent_projects {
+        project.tags = normalize_project_tags(std::mem::take(&mut project.tags));
+    }
+    normalize_repository_settings(&mut settings.repository_settings);
 
     let store = app.store("settings.json").map_err(|error| {
         AppError::with_detail(
@@ -97,8 +140,32 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             )
         })?,
     );
-    store.set("logLevel", json!(settings.log_level));
+    store.set("logLevel", json!(log_level));
     store.set("vpmTrackingPolicy", json!(settings.vpm_tracking_policy));
+    store.set(
+        "ignoreTemplates",
+        serde_json::to_value(&settings.ignore_templates).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SettingsWriteFailed,
+                "設定をシリアライズできませんでした。",
+                "serialize_settings",
+                error.to_string(),
+                false,
+            )
+        })?,
+    );
+    store.set(
+        "repositorySettings",
+        serde_json::to_value(&settings.repository_settings).map_err(|error| {
+            AppError::with_detail(
+                ErrorCode::SettingsWriteFailed,
+                "設定をシリアライズできませんでした。",
+                "serialize_settings",
+                error.to_string(),
+                false,
+            )
+        })?,
+    );
     store.save().map_err(|error| {
         AppError::with_detail(
             ErrorCode::SettingsWriteFailed,
@@ -108,11 +175,117 @@ pub fn save(app: &AppHandle, settings: AppSettings) -> AppResult<()> {
             true,
         )
     })?;
+    logging::set_log_level(log_level)?;
     info!(
         operation = "save_settings",
-        "settings saved through Tauri Store"
+        log_level, "settings saved through Tauri Store"
     );
     Ok(())
+}
+
+pub fn resolve_vpm_tracking_policy_for_project(
+    settings: &AppSettings,
+    project_path: &str,
+) -> VpmTrackingPolicy {
+    let project = Path::new(project_path)
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(project_path));
+    let repository_root = find_executable("git")
+        .and_then(|git| diagnostics::repository_root(&git, &project))
+        .flatten();
+    resolve_vpm_tracking_policy(settings, repository_root.as_deref())
+}
+
+pub fn resolve_vpm_tracking_policy(
+    settings: &AppSettings,
+    repository_root: Option<&str>,
+) -> VpmTrackingPolicy {
+    let Some(repository_root) = repository_root else {
+        return settings.vpm_tracking_policy;
+    };
+    let Some(repository_root) = canonical_path(repository_root) else {
+        return settings.vpm_tracking_policy;
+    };
+    settings
+        .repository_settings
+        .iter()
+        .find(|entry| {
+            canonical_path(&entry.repository_root)
+                .is_some_and(|root| paths_equal(&root, &repository_root))
+        })
+        .and_then(|entry| entry.vpm_tracking_policy_override)
+        .unwrap_or(settings.vpm_tracking_policy)
+}
+
+fn normalize_repository_settings(settings: &mut Vec<RepositorySettings>) {
+    let mut normalized = Vec::with_capacity(settings.len());
+    for mut entry in settings.drain(..) {
+        let trimmed = entry.repository_root.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        entry.repository_root = canonical_path(trimmed)
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| trimmed.to_owned());
+        if let Some(existing) = normalized
+            .iter_mut()
+            .find(|item: &&mut RepositorySettings| {
+                canonical_path(&item.repository_root).is_some_and(|root| {
+                    canonical_path(&entry.repository_root)
+                        .is_some_and(|entry_root| paths_equal(&root, &entry_root))
+                })
+            })
+        {
+            *existing = entry;
+        } else {
+            normalized.push(entry);
+        }
+    }
+    *settings = normalized;
+}
+
+fn canonical_path(path: &str) -> Option<PathBuf> {
+    Path::new(path).canonicalize().ok()
+}
+
+#[cfg(windows)]
+fn paths_equal(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
+}
+
+#[cfg(not(windows))]
+fn paths_equal(left: &Path, right: &Path) -> bool {
+    left == right
+}
+
+fn sort_recent_projects(projects: &mut [RecentProjectStatus]) {
+    projects.sort_by(|left, right| {
+        right
+            .last_opened_at
+            .cmp(&left.last_opened_at)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+}
+
+fn normalize_project_tags(tags: Vec<String>) -> Vec<String> {
+    const MAX_TAGS: usize = 20;
+    const MAX_TAG_LENGTH: usize = 80;
+    let mut normalized = Vec::with_capacity(tags.len().min(MAX_TAGS));
+    for tag in tags {
+        let tag = tag.trim();
+        if tag.is_empty() {
+            continue;
+        }
+        let tag = tag.chars().take(MAX_TAG_LENGTH).collect::<String>();
+        if !normalized.iter().any(|existing| existing == &tag) {
+            normalized.push(tag);
+        }
+        if normalized.len() == MAX_TAGS {
+            break;
+        }
+    }
+    normalized
 }
 
 fn load_file(path: &Path) -> AppResult<(AppSettings, bool, Option<String>)> {
@@ -245,9 +418,14 @@ fn timestamp() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::{backup_before_recovery, load_file};
+    use super::{
+        backup_before_recovery, load_file, normalize_project_tags, resolve_vpm_tracking_policy,
+        sort_recent_projects,
+    };
     use crate::errors::ErrorCode;
-    use crate::models::CURRENT_SCHEMA_VERSION;
+    use crate::models::{
+        AppSettings, RepositorySettings, VpmTrackingPolicy, CURRENT_SCHEMA_VERSION,
+    };
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -320,5 +498,87 @@ mod tests {
         let backup = backup_before_recovery(&path).unwrap();
         assert_ne!(backup, path);
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn managed_projects_are_sorted_by_latest_activity() {
+        use crate::models::RecentProjectStatus;
+
+        let mut projects = vec![
+            RecentProjectStatus {
+                path: "/older".to_owned(),
+                last_opened_at: Some("2026-08-11T00:00:00Z".to_owned()),
+                tags: Vec::new(),
+                exists: true,
+                project_kind: None,
+            },
+            RecentProjectStatus {
+                path: "/newer".to_owned(),
+                last_opened_at: Some("2026-08-12T00:00:00Z".to_owned()),
+                tags: vec!["Avatar".to_owned()],
+                exists: true,
+                project_kind: None,
+            },
+            RecentProjectStatus {
+                path: "/unknown".to_owned(),
+                last_opened_at: None,
+                tags: Vec::new(),
+                exists: false,
+                project_kind: None,
+            },
+        ];
+
+        sort_recent_projects(&mut projects);
+
+        assert_eq!(projects[0].path, "/newer");
+        assert_eq!(projects[1].path, "/older");
+        assert_eq!(projects[2].path, "/unknown");
+    }
+
+    #[test]
+    fn project_tags_are_trimmed_deduplicated_and_bounded() {
+        let tags = normalize_project_tags(vec![
+            " Avatar ".to_owned(),
+            "Avatar".to_owned(),
+            "".to_owned(),
+            "x".repeat(100),
+        ]);
+
+        assert_eq!(tags[0], "Avatar");
+        assert_eq!(tags[1].chars().count(), 80);
+        assert_eq!(tags.len(), 2);
+    }
+
+    #[test]
+    fn repository_policy_override_wins_over_global_default() {
+        let root = temp_path("policy");
+        fs::create_dir_all(&root).unwrap();
+        let settings = AppSettings {
+            vpm_tracking_policy: VpmTrackingPolicy::ExcludePackages,
+            repository_settings: vec![RepositorySettings {
+                repository_root: root.to_string_lossy().into_owned(),
+                vpm_tracking_policy_override: Some(VpmTrackingPolicy::IncludePackages),
+            }],
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            resolve_vpm_tracking_policy(&settings, Some(root.to_str().unwrap())),
+            VpmTrackingPolicy::IncludePackages
+        );
+        assert_eq!(
+            resolve_vpm_tracking_policy(&settings, Some("/missing-repository")),
+            VpmTrackingPolicy::ExcludePackages
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn missing_repository_override_falls_back_to_global_default() {
+        let settings = AppSettings::default();
+        assert_eq!(
+            resolve_vpm_tracking_policy(&settings, Some("/missing-repository")),
+            VpmTrackingPolicy::ExcludePackages
+        );
     }
 }

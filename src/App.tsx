@@ -1,293 +1,642 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { emit } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { LogWindow } from "@/LogWindow";
-import type { AppError, EnvironmentDiagnostic, ProjectDiagnostic, SettingsLoadResult, VpmTrackingPolicy } from "@/generated/bindings";
-import { exportDiagnosticLog, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, saveSettings } from "@/lib/commands";
+import type { AppError, CommitDetail, EnvironmentDiagnostic, FileDiff, HistoryEntry, IgnoreTemplateSettings, ProjectDiagnostic, ProjectKind, RepositoryIgnorePreview, RepositoryInitializationPreview, RepositoryState, SaveResult, SettingsLoadResult, VpmTrackingPolicy, WorktreeSnapshot } from "@/generated/bindings";
+import { applyIgnoreRules, exportDiagnosticLog, initializeRepository, inspectEnvironment, inspectProject, isAppError, loadSettings, openLogDirectory, openLogWindow, previewIgnoreRules, previewRepositoryInitialization, readCommitDetail, readCommitDiff, readHistory, readRepositoryState, readWorktreeDiff, readWorktreeSnapshot, saveSettings, saveWorktree } from "@/lib/commands";
+
+type GlobalSettingsSection = "GENERAL" | "DEFAULTS" | "ENVIRONMENT" | "LOGGING";
+type RepositorySection = "WORK" | "HISTORY" | "SETTINGS";
+type AppRoute =
+  | { page: "HOME" }
+  | { page: "GLOBAL_SETTINGS"; section: GlobalSettingsSection }
+  | { page: "REPOSITORY"; section: RepositorySection };
+
+let appReadySignaled = false;
 
 function App() {
+  useEffect(() => {
+    if (appReadySignaled) return;
+    appReadySignaled = true;
+    // Browser-based UI tests do not have the Tauri event bridge. The rejected
+    // promise is intentionally ignored so the same React entrypoint works there.
+    void emit("app-ready").catch(() => undefined);
+  }, []);
+
   if (currentWindowLabel() === "logs") return <LogWindow />;
   return <MainWindow />;
 }
 
 function MainWindow() {
+  const [route, setRoute] = useState<AppRoute>({ page: "HOME" });
   const [environment, setEnvironment] = useState<EnvironmentDiagnostic | null>(null);
   const [settings, setSettings] = useState<SettingsLoadResult | null>(null);
   const [project, setProject] = useState<ProjectDiagnostic | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [repositoryState, setRepositoryState] = useState<RepositoryState | null>(null);
+  const [worktree, setWorktree] = useState<WorktreeSnapshot | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [commitDetail, setCommitDetail] = useState<CommitDetail | null>(null);
+  const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
+  const [initializationPreview, setInitializationPreview] = useState<RepositoryInitializationPreview | null>(null);
+  const [ignorePreview, setIgnorePreview] = useState<RepositoryIgnorePreview | null>(null);
+  const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<AppError | null>(null);
+  const selectionGeneration = useRef(0);
 
-  const refresh = async () => {
-    setBusy(true);
+  const isBusy = pending !== null;
+  const run = async (operation: string, action: () => Promise<void>) => {
+    setPending(operation);
     setError(null);
     try {
-      const [environmentResult, settingsResult] = await Promise.all([inspectEnvironment(), loadSettings()]);
-      setEnvironment(environmentResult);
-      setSettings(settingsResult);
-      if (settingsResult.recentProjects[0]?.exists) {
-        setProject(await inspectProject(settingsResult.recentProjects[0].path, settingsResult.settings.vpmTrackingPolicy));
-      }
+      await action();
     } catch (caught) {
       setError(normalizeError(caught));
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
+  const refreshApplication = async () => {
+    await run("アプリ情報を更新", async () => {
+      const [environmentResult, settingsResult] = await Promise.all([inspectEnvironment(), loadSettings()]);
+      setEnvironment(environmentResult);
+      setSettings(settingsResult);
+    });
+  };
+
   useEffect(() => {
-    void refresh();
+    void refreshApplication();
   }, []);
 
-  const gitTone = environment?.git.status === "AVAILABLE" ? "good" : "warn";
-  const chooseProject = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const selected = await open({ directory: true, multiple: false, title: "Vsedi project folder を選択" });
-      if (typeof selected !== "string" || !settings) return;
-      const result = await inspectProject(selected, settings.settings.vpmTrackingPolicy);
+  const clearRepositoryData = () => {
+    setRepositoryState(null);
+    setWorktree(null);
+    setHistory([]);
+    setCommitDetail(null);
+    setFileDiff(null);
+    setInitializationPreview(null);
+    setIgnorePreview(null);
+    setSaveResult(null);
+  };
+
+  const reloadRepositoryData = async (projectPath = project?.path, expectedGeneration?: number) => {
+    if (!projectPath) return;
+    const [state, snapshot, entries] = await Promise.all([
+      readRepositoryState(projectPath),
+      readWorktreeSnapshot(projectPath),
+      readHistory(projectPath),
+    ]);
+    if (expectedGeneration !== undefined && expectedGeneration !== selectionGeneration.current) return;
+    setRepositoryState(state);
+    setWorktree(snapshot);
+    setHistory(entries);
+  };
+
+  const selectProject = async (path: string, replacedPath?: string, targetSection: RepositorySection = "WORK") => {
+    if (!settings) return;
+    const generation = ++selectionGeneration.current;
+    await run("project を開く", async () => {
+      const result = await inspectProject(path);
+      if (generation !== selectionGeneration.current) return;
+      clearRepositoryData();
       setProject(result);
+      const existing = settings.settings.recentProjects.find((item) => item.path === result.path)
+        ?? settings.settings.recentProjects.find((item) => item.path === replacedPath);
+      const updatedProject = { path: result.path, lastOpenedAt: new Date().toISOString(), tags: existing?.tags ?? [] };
       const nextSettings = {
         ...settings.settings,
-        recentProjects: [{ path: result.path, lastOpenedAt: new Date().toISOString() }, ...settings.settings.recentProjects.filter((item) => item.path !== result.path)].slice(0, 10),
+        recentProjects: [updatedProject, ...settings.settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
       };
       await saveSettings(nextSettings);
-      setSettings({ ...settings, settings: nextSettings, recentProjects: [{ ...nextSettings.recentProjects[0], exists: true }, ...settings.recentProjects.filter((item) => item.path !== result.path)].slice(0, 10) });
+      if (generation !== selectionGeneration.current) return;
+      setSettings({
+        ...settings,
+        settings: nextSettings,
+        recentProjects: [{ ...updatedProject, exists: true, projectKind: result.projectKind }, ...settings.recentProjects.filter((item) => item.path !== result.path && item.path !== replacedPath)],
+      });
+      setRoute({ page: "REPOSITORY", section: targetSection });
+      if (result.repository.detected) await reloadRepositoryData(result.path, generation);
+    });
+  };
+
+  const chooseProject = async () => {
+    if (!settings) return;
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Vsedi project folder を選択" });
+      if (typeof selected === "string") await selectProject(selected);
     } catch (caught) {
       setError(normalizeError(caught));
-    } finally {
-      setBusy(false);
     }
+  };
+
+  const reassignManagedProject = async (path: string) => {
+    if (!settings) return;
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "移動後のproject folderを選択" });
+      if (typeof selected === "string") await selectProject(selected, path);
+    } catch (caught) {
+      setError(normalizeError(caught));
+    }
+  };
+
+  const removeManagedProject = async (path: string) => {
+    if (!settings) return;
+    const nextSettings = {
+      ...settings.settings,
+      recentProjects: settings.settings.recentProjects.filter((item) => item.path !== path),
+    };
+    await run("管理Projectを削除", async () => {
+      await saveSettings(nextSettings);
+      setSettings((current) => current ? { ...current, settings: nextSettings, recentProjects: current.recentProjects.filter((item) => item.path !== path) } : current);
+    });
+  };
+
+  const updateSettings = async (nextSettings: SettingsLoadResult["settings"]) => {
+    await run("設定を保存", async () => {
+      await saveSettings(nextSettings);
+      setSettings((current) => current ? { ...current, settings: nextSettings } : current);
+      if (project) {
+        const refreshed = await inspectProject(project.path);
+        setProject(refreshed);
+      }
+    });
   };
 
   const updateVpmTrackingPolicy = async (policy: VpmTrackingPolicy) => {
     if (!settings || settings.settings.vpmTrackingPolicy === policy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const nextSettings = { ...settings.settings, vpmTrackingPolicy: policy };
-      await saveSettings(nextSettings);
-      setSettings({ ...settings, settings: nextSettings });
-      if (project) setProject(await inspectProject(project.path, policy));
-    } catch (caught) {
-      setError(normalizeError(caught));
-    } finally {
-      setBusy(false);
+    await updateSettings({ ...settings.settings, vpmTrackingPolicy: policy });
+  };
+
+  const updateRepositoryVpmTrackingPolicy = async (policy: VpmTrackingPolicy | null) => {
+    if (!settings || !project?.repository.root) return;
+    const repositoryRoot = project.repository.root;
+    const current = settings.settings.repositorySettings.find((item) => item.repositoryRoot === repositoryRoot);
+    if ((current?.vpmTrackingPolicyOverride ?? null) === policy) return;
+    const nextRepositorySettings = settings.settings.repositorySettings
+      .filter((item) => item.repositoryRoot !== repositoryRoot);
+    if (policy) {
+      nextRepositorySettings.push({ repositoryRoot, vpmTrackingPolicyOverride: policy });
     }
+    await updateSettings({ ...settings.settings, repositorySettings: nextRepositorySettings });
+  };
+
+  const updateLogLevel = async (logLevel: string) => {
+    if (!settings || settings.settings.logLevel === logLevel) return;
+    await updateSettings({ ...settings.settings, logLevel });
+  };
+
+  const updateIgnoreTemplates = async (ignoreTemplates: IgnoreTemplateSettings) => {
+    if (!settings) return;
+    await updateSettings({ ...settings.settings, ignoreTemplates });
+  };
+
+  const updateProjectTags = async (path: string, tags: string[]) => {
+    if (!settings) return;
+    const normalizedTags = normalizeTags(tags);
+    const updatedAt = new Date().toISOString();
+    const nextSettings = {
+      ...settings.settings,
+      recentProjects: settings.settings.recentProjects.map((item) => item.path === path ? { ...item, tags: normalizedTags, lastOpenedAt: updatedAt } : item),
+    };
+    await run("タグを保存", async () => {
+      await saveSettings(nextSettings);
+      setSettings({
+        ...settings,
+        settings: nextSettings,
+        recentProjects: settings.recentProjects
+          .map((item) => item.path === path ? { ...item, tags: normalizedTags, lastOpenedAt: updatedAt } : item)
+          .sort(compareManagedProjects),
+      });
+    });
+  };
+
+  const previewInitialization = async () => {
+    if (!project) return;
+    await run("初期化内容を確認", async () => {
+      setInitializationPreview(await previewRepositoryInitialization(project.path));
+    });
+  };
+
+  const previewIgnore = async () => {
+    if (!project?.repository.detected) return;
+    await run("ignore ruleを確認", async () => {
+      setIgnorePreview(await previewIgnoreRules(project.path));
+    });
+  };
+
+  const applyIgnore = async () => {
+    if (!project || !ignorePreview) return;
+    await run("ignore ruleを適用", async () => {
+      await applyIgnoreRules({ projectPath: project.path, statusToken: ignorePreview.statusToken });
+      setIgnorePreview(null);
+      const refreshed = await inspectProject(project.path);
+      setProject(refreshed);
+      await reloadRepositoryData(project.path);
+    });
+  };
+
+  const applyInitialization = async () => {
+    if (!project || !settings || !initializationPreview) return;
+    await run("repository を初期化", async () => {
+      await initializeRepository({ projectPath: project.path, statusToken: initializationPreview.statusToken });
+      setInitializationPreview(null);
+      const refreshed = await inspectProject(project.path);
+      setProject(refreshed);
+      await reloadRepositoryData(refreshed.path);
+    });
+  };
+
+  const saveCurrentWork = async (memo: string) => {
+    if (!project || !worktree) return;
+    await run("作業を保存", async () => {
+      const result = await saveWorktree({ projectPath: project.path, statusToken: worktree.statusToken, memo });
+      setSaveResult(result);
+      setCommitDetail(null);
+      setFileDiff(null);
+      await reloadRepositoryData(project.path);
+    });
+  };
+
+  const selectCommit = async (entry: HistoryEntry) => {
+    if (!project) return;
+    await run("保存詳細を読み込む", async () => {
+      setFileDiff(null);
+      setCommitDetail(await readCommitDetail(project.path, entry.commitId));
+    });
+  };
+
+  const showCommitDiff = async (path: string) => {
+    if (!project || !commitDetail) return;
+    await run("差分を読み込む", async () => {
+      setFileDiff(await readCommitDiff(project.path, commitDetail.commitId, path));
+    });
+  };
+
+  const showWorktreeDiff = async (path: string) => {
+    if (!project) return;
+    await run("差分を読み込む", async () => {
+      setFileDiff(await readWorktreeDiff(project.path, path));
+    });
   };
 
   const exportLog = async () => {
     try {
       const destination = await save({ defaultPath: "vsedi-diagnostic.log", title: "診断ログを書き出す" });
-      if (destination) await exportDiagnosticLog(destination);
+      if (destination) await run("診断ログを書き出す", async () => { await exportDiagnosticLog(destination); });
     } catch (caught) {
       setError(normalizeError(caught));
     }
   };
 
-  const showLogDirectory = async () => {
-    try {
-      await openLogDirectory();
-    } catch (caught) {
-      setError(normalizeError(caught));
-    }
+  const openLogs = async () => {
+    await run("ログを開く", async () => { await openLogWindow(); });
   };
 
-  const showLogWindow = async () => {
-    try {
-      await openLogWindow();
-    } catch (caught) {
-      setError(normalizeError(caught));
-    }
+  const openLogFolder = async () => {
+    await run("ログフォルダを開く", async () => { await openLogDirectory(); });
   };
 
-  const platformLabel = useMemo(() => {
-    if (!environment) return "確認中";
-    return `${environment.platform.os} / ${environment.platform.architecture}`;
-  }, [environment]);
+  const navigateRepository = (section: RepositorySection) => {
+    setFileDiff(null);
+    if (section !== "HISTORY") setCommitDetail(null);
+    setRoute({ page: "REPOSITORY", section });
+  };
+
+  const pageTitle = route.page === "HOME"
+    ? "ホーム"
+    : route.page === "GLOBAL_SETTINGS"
+      ? "全体設定"
+      : route.section === "WORK"
+        ? "現在の作業"
+        : route.section === "HISTORY" ? "保存履歴" : "リポジトリ設定";
 
   return (
-    <main className="min-h-screen bg-mist px-8 py-7 text-ink">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex items-start justify-between gap-6">
-          <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.28em] text-accent">Local first · Safety over power</p>
-            <h1 className="text-4xl font-bold tracking-tight">Vsedi</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">Unity / VRChat project の状態を確認し、作業を安全に保存するためのローカルデスクトップ基盤。</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => void showLogWindow()}>ログ表示</Button>
-            <Button variant="ghost" onClick={() => void showLogDirectory()}>ログフォルダ</Button>
-            <Button variant="secondary" onClick={() => void exportLog()}>診断ログを書き出す</Button>
-          </div>
-        </header>
+    <main className="min-h-screen bg-mist text-ink">
+      <div className="mx-auto flex min-h-screen max-w-[1440px]">
+        <AppSidebar
+          route={route}
+          project={project}
+          onHome={() => setRoute({ page: "HOME" })}
+          onRepository={navigateRepository}
+          onGlobalSettings={(section) => setRoute({ page: "GLOBAL_SETTINGS", section })}
+        />
+        <div className="min-w-0 flex-1 px-5 py-6 sm:px-8">
+          <AppHeader
+            pageTitle={pageTitle}
+            project={route.page === "REPOSITORY" ? project : null}
+            repositoryState={repositoryState}
+            pending={pending}
+            onAddProject={route.page === "HOME" ? () => void chooseProject() : undefined}
+            onRefresh={() => void refreshApplication()}
+          />
 
-        {error && (
-          <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
-            <div className="font-semibold">{error.message}</div>
-            <div className="mt-1 text-xs text-rose-700">{error.code}{error.mayHaveMutated ? " · 状態が変化した可能性があります" : ""}</div>
-          </div>
-        )}
+          {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
+          {settings?.recovered && <RecoveryNotice settings={settings} />}
 
-        {settings?.recovered && (
-          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-            settings.json を保全して初期設定を再生成しました。{settings.backupPath ? ` 退避先: ${settings.backupPath}` : ""}
-          </div>
-        )}
+          {route.page === "HOME" && (
+            <HomePage
+              environment={environment}
+              settings={settings}
+              busy={isBusy}
+              onOpenProject={(path) => void selectProject(path)}
+              onOpenRepositorySettings={(path) => void selectProject(path, undefined, "SETTINGS")}
+              onReassignProject={(path) => void reassignManagedProject(path)}
+              onRemoveProject={(path) => void removeManagedProject(path)}
+              onOpenSettings={() => setRoute({ page: "GLOBAL_SETTINGS", section: "ENVIRONMENT" })}
+            />
+          )}
 
-        <section className="grid gap-5 md:grid-cols-2">
-          <Card>
-            <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">実行環境</h2><StatusPill label={environment?.platform.supported ? "対応対象" : "確認が必要"} tone={environment?.platform.supported ? "good" : "warn"} /></div></CardHeader>
-            <CardContent><p className="text-sm text-slate-600">{platformLabel}</p><p className="mt-2 text-xs text-slate-400">正式対応: Windows / Apple Silicon macOS</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><div className="flex items-center justify-between"><h2 className="font-semibold">System Git</h2><StatusPill label={environment?.git.status === "AVAILABLE" ? "利用可能" : "未検出"} tone={gitTone} /></div></CardHeader>
-            <CardContent><p className="text-sm text-slate-600">{environment?.git.version ?? "Git を診断中"}</p><p className="mt-2 truncate text-xs text-slate-400">{environment?.git.executable ?? "PATH から検出します"}</p></CardContent>
-          </Card>
-        </section>
+          {route.page === "GLOBAL_SETTINGS" && (
+            <GlobalSettingsPage
+              section={route.section}
+              environment={environment}
+              settings={settings}
+              busy={isBusy}
+              onChangeSection={(section) => setRoute({ page: "GLOBAL_SETTINGS", section })}
+              onUpdateVpm={(policy) => void updateVpmTrackingPolicy(policy)}
+              onUpdateLogLevel={(level) => void updateLogLevel(level)}
+              onOpenLogs={() => void openLogs()}
+              onOpenLogFolder={() => void openLogFolder()}
+              onExportLog={() => void exportLog()}
+              onUpdateIgnoreTemplates={(templates) => void updateIgnoreTemplates(templates)}
+            />
+          )}
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1.4fr_0.9fr]">
-          <Card>
-            <CardHeader><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Project boundary</p><h2 className="mt-1 text-xl font-semibold">管理する project</h2></div><Button onClick={() => void chooseProject()} disabled={busy}>フォルダを選択</Button></div></CardHeader>
-            <CardContent>
-              {project ? (
-                <div className="space-y-5">
-                  <div className="rounded-xl bg-slate-50 px-4 py-3">
-                    <p className="break-all text-sm font-medium">{project.path}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {project.unityVersion ? `Unity ${project.unityVersion}` : "Unity version 不明"}
-                      {project.unityRevision ? ` · revision ${project.unityRevision}` : ""}
-                    </p>
-                  </div>
+          {route.page === "REPOSITORY" && project && route.section === "WORK" && (
+            <WorkPage
+              project={project}
+              repositoryState={repositoryState}
+              worktree={worktree}
+              initializationPreview={initializationPreview}
+              saveResult={saveResult}
+              busy={isBusy}
+              onPreviewInitialization={() => void previewInitialization()}
+              onApplyInitialization={() => void applyInitialization()}
+              onCancelInitialization={() => setInitializationPreview(null)}
+              onSave={(memo) => void saveCurrentWork(memo)}
+              onShowDiff={(path) => void showWorktreeDiff(path)}
+              fileDiff={fileDiff}
+              onGoToRepositorySettings={() => navigateRepository("SETTINGS")}
+            />
+          )}
 
-                  <div className="flex flex-wrap gap-2">
-                    <StatusPill label={projectStatusLabel(project.status)} tone={projectStatusTone(project.status)} />
-                    <StatusPill label={projectKindLabel(project.projectKind)} tone={project.projectKind === "UNITY" ? "neutral" : "good"} />
-                  </div>
+          {route.page === "REPOSITORY" && project && route.section === "HISTORY" && (
+            <HistoryPage
+              history={history}
+              commitDetail={commitDetail}
+              fileDiff={fileDiff}
+              busy={isBusy}
+              onSelectCommit={(entry) => void selectCommit(entry)}
+              onShowDiff={(path) => void showCommitDiff(path)}
+            />
+          )}
 
-                  {settings && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">VPM packageのGit管理</p>
-                        <p className="mt-1 text-xs text-slate-500">すべてのprojectに適用する診断方針です。</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant={settings.settings.vpmTrackingPolicy === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => void updateVpmTrackingPolicy("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button>
-                        <Button variant={settings.settings.vpmTrackingPolicy === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => void updateVpmTrackingPolicy("INCLUDE_PACKAGES")} disabled={busy}>含める</Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {project.isUnityProject && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} />
-                      <DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} />
-                    </div>
-                  )}
-
-                  {project.vpm.packages.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">検出 package</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {project.vpm.packages.filter((item) => item.name.startsWith("com.vrchat.")).map((item) => (
-                          <span key={item.name} className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
-                            {item.name}{item.version ? ` ${item.version}` : ""}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {project.issues.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">診断結果</p>
-                      {project.issues.map((issue, index) => (
-                        <div key={`${issue.code}-${index}`} className={issueClass(issue.severity)}>
-                          <p className="text-sm font-medium">{issue.message}</p>
-                          <p className="mt-1 text-xs opacity-70">{issue.code}{shouldShowIssuePath(issue) ? ` · ${issue.path}` : ""}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                      現在の診断範囲では、修正が必要な状態は見つかりませんでした。
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="py-8 text-center text-sm text-slate-500">project folder を選択すると、Rust 側で Unity / VRChat / Git 設定を診断します。</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><h2 className="font-semibold">最近の project</h2></CardHeader>
-            <CardContent>{settings?.recentProjects.length ? <div className="space-y-3">{settings.recentProjects.map((item) => <div key={item.path} className="flex items-center justify-between gap-3 text-sm"><span className="truncate text-slate-600" title={item.path}>{item.path}</span><StatusPill label={item.exists ? "存在" : "再指定"} tone={item.exists ? "good" : "warn"} /></div>)}</div> : <p className="text-sm text-slate-500">まだ登録されていません。</p>}</CardContent>
-          </Card>
-        </section>
-
-        <footer className="mt-8 flex items-center justify-between text-xs text-slate-400"><span>Rust command boundary · structured diagnostics</span><Button variant="ghost" onClick={() => void refresh()} disabled={busy}>{busy ? "確認中…" : "再診断"}</Button></footer>
+          {route.page === "REPOSITORY" && project && route.section === "SETTINGS" && (
+            <RepositorySettingsPage
+              project={project}
+              settings={settings}
+              initializationPreview={initializationPreview}
+              busy={isBusy}
+              onPreviewInitialization={() => void previewInitialization()}
+              onApplyInitialization={() => void applyInitialization()}
+              onCancelInitialization={() => setInitializationPreview(null)}
+              onOpenGlobalDefaults={() => setRoute({ page: "GLOBAL_SETTINGS", section: "DEFAULTS" })}
+              onUpdateTags={(tags) => void updateProjectTags(project.path, tags)}
+              onUpdateVpm={(policy) => void updateRepositoryVpmTrackingPolicy(policy)}
+              ignorePreview={ignorePreview}
+              onPreviewIgnore={() => void previewIgnore()}
+              onApplyIgnore={() => void applyIgnore()}
+            />
+          )}
+        </div>
       </div>
-
     </main>
   );
 }
 
-function currentWindowLabel() {
-  try {
-    return getCurrentWindow().label;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeError(error: unknown): AppError {
-  if (isAppError(error)) return error;
-  return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false };
-}
-
-function projectStatusLabel(status: ProjectDiagnostic["status"]) {
-  if (status === "MANAGEABLE") return "管理可能";
-  if (status === "NEEDS_ATTENTION") return "要修正";
-  return "非 Unity";
-}
-
-function projectStatusTone(status: ProjectDiagnostic["status"]): "good" | "warn" | "neutral" {
-  if (status === "MANAGEABLE") return "good";
-  if (status === "NEEDS_ATTENTION") return "warn";
-  return "neutral";
-}
-
-function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) {
-  const labels: Record<ProjectDiagnostic["projectKind"], string> = {
-    UNITY: "Unity project",
-    VRCHAT_AVATAR: "VRChat Avatar",
-    VRCHAT_WORLD: "VRChat World",
-    VRCHAT_UNKNOWN: "VRChat 種別不明",
-  };
-  return labels[kind];
-}
-
-function DiagnosticItem({ label, status, summary }: { label: string; status: ProjectDiagnostic["sourceControl"]["gitignore"]["status"]; summary: string }) {
-  const tone = status === "HEALTHY" ? "border-emerald-200 bg-emerald-50" : status === "NOT_APPLICABLE" ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50";
+function AppSidebar({ route, project, onHome, onRepository, onGlobalSettings }: {
+  route: AppRoute;
+  project: ProjectDiagnostic | null;
+  onHome: () => void;
+  onRepository: (section: RepositorySection) => void;
+  onGlobalSettings: (section: GlobalSettingsSection) => void;
+}) {
+  const repositoryOpen = route.page === "REPOSITORY";
   return (
-    <div className={`rounded-xl border px-3 py-3 ${tone}`}>
-      <p className="text-xs font-semibold text-slate-700">{label}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-600">{summary}</p>
-    </div>
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 lg:block">
+      <div className="px-3 pb-7"><p className="text-xs font-bold uppercase tracking-[0.28em] text-accent">Local first</p><h1 className="mt-2 text-2xl font-bold tracking-tight">Vsedi</h1></div>
+      <nav className="space-y-1" aria-label="メインナビゲーション">
+        <NavigationButton active={route.page === "HOME"} onClick={onHome}>ホーム</NavigationButton>
+        {repositoryOpen && project && (
+          <>
+            <p className="px-3 pt-6 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">選択中の project</p>
+            <p className="truncate px-3 pt-2 text-sm font-semibold text-slate-700" title={project.path}>{projectName(project.path)}</p>
+            <NavigationButton active={route.section === "WORK"} onClick={() => onRepository("WORK")}>現在の作業</NavigationButton>
+            <NavigationButton active={route.section === "HISTORY"} onClick={() => onRepository("HISTORY")}>保存履歴</NavigationButton>
+            <NavigationButton active={route.section === "SETTINGS"} onClick={() => onRepository("SETTINGS")}>リポジトリ設定</NavigationButton>
+          </>
+        )}
+        <p className="px-3 pt-6 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">アプリ</p>
+        <NavigationButton active={route.page === "GLOBAL_SETTINGS"} onClick={() => onGlobalSettings("GENERAL")}>全体設定</NavigationButton>
+      </nav>
+    </aside>
   );
 }
 
-function issueClass(severity: ProjectDiagnostic["issues"][number]["severity"]) {
-  if (severity === "ERROR") return "rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800";
-  if (severity === "WARNING") return "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900";
-  return "rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-800";
+function NavigationButton({ active, children, onClick }: { active: boolean; children: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className={`flex w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{children}</button>;
 }
 
-function shouldShowIssuePath(issue: ProjectDiagnostic["issues"][number]) {
-  return issue.code !== "GIT_ROOT_OUTSIDE_PROJECT" && Boolean(issue.path);
+function AppHeader({ pageTitle, project, repositoryState, pending, onAddProject, onRefresh }: { pageTitle: string; project: ProjectDiagnostic | null; repositoryState: RepositoryState | null; pending: string | null; onAddProject?: () => void; onRefresh: () => void }) {
+  return (
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
+      <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Vsedi</p><h2 className="mt-1 text-2xl font-bold tracking-tight">{pageTitle}</h2>{project && <p className="mt-1 break-all text-sm text-slate-500">{project.path}{repositoryState?.root && repositoryState.root !== project.path ? ` · 保存対象: ${repositoryState.root}` : ""}</p>}</div>
+      <div className="flex items-center gap-2">{pending && <span className="text-xs text-slate-500">{pending}…</span>}{onAddProject && <Button variant="secondary" onClick={onAddProject} disabled={Boolean(pending)}>Projectを追加</Button>}<Button variant="ghost" onClick={onRefresh} disabled={Boolean(pending)}>再読込</Button></div>
+    </header>
+  );
 }
+
+function GearIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M10.3 2.8h3.4l.5 2.1c.5.2 1 .4 1.5.8l2-.8 1.7 3-1.6 1.4c.1.5.1 1.1 0 1.7l1.6 1.4-1.7 3-2-.8c-.5.3-1 .6-1.5.8l-.5 2.1h-3.4l-.5-2.1a7 7 0 0 1-1.5-.8l-2 .8-1.7-3 1.6-1.4a7 7 0 0 1 0-1.7L4.6 7.9l1.7-3 2 .8c.5-.3 1-.6 1.5-.8l.5-2.1Z" /><circle cx="12" cy="10.2" r="2.6" /></svg>;
+}
+
+function SearchIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="10.8" cy="10.8" r="6.8" /><path strokeLinecap="round" d="m16 16 5 5" /></svg>;
+}
+
+function ClearIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" d="m6 6 12 12M18 6 6 18" /></svg>;
+}
+
+function ChevronIcon({ direction }: { direction: "up" | "down" }) {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={direction === "up" ? "m6 14 6-6 6 6" : "m6 10 6 6 6-6"} /></svg>;
+}
+
+function ProjectTypeIcon({ kind }: { kind: ProjectKind | null }) {
+  const label = kind === "VRCHAT_AVATAR" ? "アバター" : kind === "VRCHAT_WORLD" ? "ワールド" : kind === "VRCHAT_UNKNOWN" ? "VRChat project" : "Unity project";
+  return <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500" title={label} aria-label={label} role="img">{kind === "VRCHAT_AVATAR" ? <AvatarIcon /> : kind === "VRCHAT_WORLD" ? <GlobeIcon /> : <FolderIcon />}</span>;
+}
+
+function AvatarIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M5.5 20c.7-3.5 2.8-5.3 6.5-5.3s5.8 1.8 6.5 5.3" /></svg>;
+}
+
+function GlobeIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8.5" /><path strokeLinecap="round" d="M3.8 12h16.4M12 3.5c2.1 2.3 3.2 5.1 3.2 8.5s-1.1 6.2-3.2 8.5c-2.1-2.3-3.2-5.1-3.2-8.5S9.9 5.8 12 3.5Z" /></svg>;
+}
+
+function FolderIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.5 6.5h6l1.7 2h9.3v9.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7V6.5Z" /></svg>;
+}
+
+function HomePage({ environment, settings, busy, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject, onOpenSettings }: { environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void; onOpenSettings: () => void }) {
+  const gitAvailable = environment?.git.status === "AVAILABLE";
+  const [introCollapsed, setIntroCollapsed] = useState(false);
+  return <div className="space-y-6">
+    <section className={`relative rounded-3xl bg-slate-900 text-white shadow-panel ${introCollapsed ? "px-6 py-4 sm:px-8" : "px-6 py-7 sm:px-8"}`}><button type="button" className="absolute right-4 top-4 rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white" onClick={() => setIntroCollapsed((current) => !current)} aria-expanded={!introCollapsed} aria-label={introCollapsed ? "お知らせを展開" : "お知らせを最小化"} title={introCollapsed ? "お知らせを展開" : "お知らせを最小化"}><ChevronIcon direction={introCollapsed ? "down" : "up"} /></button><div className="pr-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">制作のセーブポイント</p><h3 className={`${introCollapsed ? "mt-1 text-lg" : "mt-3 text-3xl"} font-bold tracking-tight`}>管理する project を選択</h3>{!introCollapsed && <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。</p>}</div></section>
+    {!gitAvailable && environment && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold text-amber-900">System Git を確認してください</p><p className="mt-1 text-sm text-amber-800">Git が利用できないため、作業を保存できません。</p></div><Button variant="secondary" onClick={onOpenSettings}>実行環境を開く</Button></CardContent></Card>}
+    {settings ? <ManagedProjectList projects={settings.recentProjects} busy={busy} onOpenProject={onOpenProject} onOpenRepositorySettings={onOpenRepositorySettings} onReassignProject={onReassignProject} onRemoveProject={onRemoveProject} /> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">管理Projectを読み込んでいます…</p></CardContent></Card>}
+  </div>;
+}
+
+function ManagedProjectList({ projects, busy, onOpenProject, onOpenRepositorySettings, onReassignProject, onRemoveProject }: { projects: SettingsLoadResult["recentProjects"]; busy: boolean; onOpenProject: (path: string) => void; onOpenRepositorySettings: (path: string) => void; onReassignProject: (path: string) => void; onRemoveProject: (path: string) => void }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const tags = [...new Set(projects.flatMap((item) => item.tags))].sort((left, right) => left.localeCompare(right, "ja"));
+  const tagKey = tags.join("\u0000");
+  const sortedProjects = [...projects].sort(compareManagedProjects);
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ja-JP");
+  const visibleProjects = sortedProjects.filter((item) => {
+    const haystack = [projectName(item.path), item.path, ...item.tags].join("\n").toLocaleLowerCase("ja-JP");
+    const matchesSearch = !normalizedQuery || haystack.includes(normalizedQuery);
+    const matchesTags = selectedTags.length === 0 || selectedTags.some((tag) => item.tags.includes(tag));
+    return matchesSearch && matchesTags;
+  });
+
+  useEffect(() => {
+    setSelectedTags((current) => current.filter((tag) => tags.includes(tag)));
+  }, [tagKey]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  };
+
+  const hasFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0;
+  return <section><div className="mb-3 flex flex-wrap items-center justify-between gap-4"><div className="flex min-w-0 items-center gap-2"><h3 className="text-lg font-bold">管理しているProject</h3><button type="button" className={`relative rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 ${searchOpen ? "bg-slate-100 text-slate-900" : ""}`} onClick={() => setSearchOpen((current) => !current)} aria-expanded={searchOpen} aria-controls="managed-project-search" aria-label={searchOpen ? "Project検索を閉じる" : "Projectを検索"} title={searchOpen ? "検索欄を閉じる" : "検索欄を表示"}><SearchIcon />{hasFilters && !searchOpen && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" />}</button><p className="hidden text-sm text-slate-500 sm:block">最終更新が新しい順に表示します。</p></div><span className="text-xs text-slate-400">{visibleProjects.length} / {projects.length} 件</span></div>{searchOpen && <div id="managed-project-search" className="mb-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4"><label className="block text-xs font-semibold text-slate-500" htmlFor="project-search">Projectを検索</label><div className="relative"><input id="project-search" className="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-sm" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Project名、パス、タグを入力" disabled={busy} />{searchQuery && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" onClick={() => setSearchQuery("")} disabled={busy} aria-label="検索文字をクリア" title="検索文字をクリア"><ClearIcon /></button>}</div>{tags.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-500">タグ</span>{tags.map((tag) => <button type="button" key={tag} onClick={() => toggleTag(tag)} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${selectedTags.includes(tag) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`} aria-pressed={selectedTags.includes(tag)}>{tag}</button>)}{selectedTags.length > 0 && <button type="button" className="ml-1 text-xs font-semibold text-slate-500 underline" onClick={() => setSelectedTags([])}>タグ絞り込みを解除</button>}</div>}</div>}{visibleProjects.length ? <div className="space-y-3">{visibleProjects.map((item) => <Card key={item.path}><CardContent><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><ProjectTypeIcon kind={item.projectKind} /><p className="truncate font-semibold text-slate-800" title={item.path}>{projectName(item.path)}</p><ProjectTagBadges tags={item.tags} />{!item.exists && <StatusPill label="再指定" tone="warn" />}</div><p className="mt-1 truncate text-xs text-slate-500" title={item.path}>{item.path}</p><p className="mt-3 text-xs text-slate-400">{item.lastOpenedAt ? `最終更新: ${formatDate(item.lastOpenedAt)}` : "更新日時は未記録"}</p></div><div className="flex flex-wrap justify-end gap-2">{item.exists && <Button variant="secondary" className="h-10 w-10 p-0" onClick={() => onOpenRepositorySettings(item.path)} disabled={busy} aria-label={`${projectName(item.path)}のリポジトリ設定を開く`} title="リポジトリ設定を開く"><GearIcon /></Button>}{item.exists ? <Button onClick={() => onOpenProject(item.path)} disabled={busy}>開く</Button> : <Button onClick={() => onReassignProject(item.path)} disabled={busy}>場所を再指定</Button>}<Button variant="ghost" onClick={() => onRemoveProject(item.path)} disabled={busy}>一覧から削除</Button></div></div></CardContent></Card>)}</div> : <Card><CardContent><p className="py-6 text-center text-sm text-slate-500">{projects.length ? "検索条件に一致するProjectはありません。" : "まだProjectは登録されていません。"}</p></CardContent></Card>}</section>;
+}
+
+function WorkPage({ project, repositoryState, worktree, initializationPreview, saveResult, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onSave, onShowDiff, fileDiff, onGoToRepositorySettings }: {
+  project: ProjectDiagnostic; repositoryState: RepositoryState | null; worktree: WorktreeSnapshot | null; initializationPreview: RepositoryInitializationPreview | null; saveResult: SaveResult | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onSave: (memo: string) => void; onShowDiff: (path: string) => void; fileDiff: FileDiff | null; onGoToRepositorySettings: () => void;
+}) {
+  const [memo, setMemo] = useState("");
+  useEffect(() => { setMemo(""); }, [project.path]);
+  if (!project.repository.detected) return <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} onGoToSettings={onGoToRepositorySettings} />;
+  return <div className="space-y-5">
+    <section className="grid gap-3 md:grid-cols-3"><SummaryTile label="project" value={projectKindLabel(project.projectKind)} detail={project.unityVersion ? `Unity ${project.unityVersion}` : "Unity version 不明"} /><SummaryTile label="保存状態" value={repositoryState?.canSave ? "保存可能" : repositoryState ? "確認が必要" : "読み込み中"} detail={worktree ? `${worktree.files.length} 件の変更` : "変更を読み込み中"} tone={repositoryState?.canSave ? "good" : "warn"} /><SummaryTile label="診断" value={projectStatusLabel(project.status)} detail={project.issues.length ? `${project.issues.length} 件の確認項目` : "問題は見つかりませんでした"} tone={project.status === "MANAGEABLE" ? "good" : "warn"} /></section>
+    <Card><CardHeader><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">現在の変更</h3><p className="mt-1 text-xs text-slate-500">保存対象はrepository全体です。project外の変更もここに表示します。</p></div><StatusPill label={repositoryState?.canSave ? "保存可能" : "確認が必要"} tone={repositoryState?.canSave ? "good" : "warn"} /></div></CardHeader><CardContent>
+      {repositoryState?.blockingReason === "EXISTING_STAGED_CHANGES" && <BlockingNotice>すでにGitのステージにある変更があるため、安全のため保存を開始できません。</BlockingNotice>}
+      {repositoryState?.blockingReason === "CONFLICT" && <BlockingNotice tone="danger">競合中のファイルがあるため、保存を開始できません。</BlockingNotice>}
+      <ChangedFiles files={worktree?.files ?? []} onSelect={onShowDiff} />
+      {repositoryState?.canSave && worktree?.files.length ? <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><div className="relative min-w-56 flex-1"><input className="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-sm" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="保存メモ（例: アバターの表情を調整）" disabled={busy} />{memo && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" onClick={() => setMemo("")} disabled={busy} aria-label="保存メモをクリア" title="保存メモをクリア"><ClearIcon /></button>}</div><Button onClick={() => { onSave(memo); setMemo(""); }} disabled={busy || !memo.trim()}>作業を保存</Button></div> : null}
+      {saveResult && <p className="mt-4 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-800">保存しました: {saveResult.shortCommitId} · {saveResult.fileCount} file · {saveResult.authorTime}</p>}
+    </CardContent></Card>
+    {fileDiff && <DiffPanel diff={fileDiff} />}
+    <DiagnosticSummary project={project} onGoToSettings={onGoToRepositorySettings} />
+  </div>;
+}
+
+function RepositorySetup({ project, preview, busy, onPreview, onApply, onCancel, onGoToSettings }: { project: ProjectDiagnostic; preview: RepositoryInitializationPreview | null; busy: boolean; onPreview: () => void; onApply: () => void; onCancel: () => void; onGoToSettings?: () => void }) {
+  return <div className="space-y-5"><Card className="border-sky-200 bg-sky-50"><CardHeader><h3 className="font-semibold text-sky-950">ローカル保存を準備する</h3></CardHeader><CardContent><p className="text-sm leading-6 text-sky-900">このUnity projectにはまだGit repositoryがありません。作成内容を確認してから、Unity用のignore ruleとともにローカル保存を始められます。</p>{!preview ? <Button className="mt-4" onClick={onPreview} disabled={busy}>作成内容を確認</Button> : <div className="mt-4 space-y-3 rounded-xl bg-white/80 p-4">{preview.ignoreFiles.map((file) => <div key={file.path}><p className="text-sm font-semibold text-slate-800">{file.path}{file.willCreate ? "（新規作成）" : ""}</p><p className="mt-1 text-xs text-slate-600">{file.missingRules.length ? `${file.missingRules.length} 件のruleを追加します。` : "変更はありません。"}</p></div>)}{preview.canInitialize ? <div className="flex gap-2"><Button onClick={onApply} disabled={busy}>この内容で初期化</Button><Button variant="secondary" onClick={onCancel} disabled={busy}>キャンセル</Button></div> : <p className="text-sm text-rose-800">{preview.blockingReason}</p>}</div>}</CardContent></Card>{onGoToSettings && <DiagnosticSummary project={project} onGoToSettings={onGoToSettings} />}</div>;
+}
+
+function HistoryPage({ history, commitDetail, fileDiff, busy, onSelectCommit, onShowDiff }: { history: HistoryEntry[]; commitDetail: CommitDetail | null; fileDiff: FileDiff | null; busy: boolean; onSelectCommit: (entry: HistoryEntry) => void; onShowDiff: (path: string) => void }) {
+  return <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"><Card><CardHeader><h3 className="font-semibold">保存履歴</h3><p className="mt-1 text-xs text-slate-500">過去の保存を選ぶと、変更内容を確認できます。</p></CardHeader><CardContent>{history.length ? <div className="space-y-2">{history.map((entry) => <button type="button" key={entry.commitId} onClick={() => onSelectCommit(entry)} disabled={busy} className={`w-full rounded-xl px-3 py-3 text-left transition ${commitDetail?.commitId === entry.commitId ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}><p className="truncate text-sm font-semibold">{entry.memo}</p><p className={`mt-1 text-xs ${commitDetail?.commitId === entry.commitId ? "text-slate-300" : "text-slate-500"}`}>{entry.shortCommitId} · {entry.authorTime}</p></button>)}</div> : <p className="py-6 text-center text-sm text-slate-500">まだ保存履歴はありません。</p>}</CardContent></Card><div className="space-y-5">{commitDetail ? <Card><CardHeader><h3 className="font-semibold">保存の詳細</h3></CardHeader><CardContent><p className="text-lg font-semibold">{commitDetail.memo}</p><p className="mt-1 break-all text-xs text-slate-500">{commitDetail.commitId} · {commitDetail.authorTime}</p><div className="mt-5 space-y-2">{commitDetail.files.map((file) => <button type="button" onClick={() => onShowDiff(file.path)} disabled={busy} key={`${file.path}-${file.oldPath ?? ""}`} className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"><span className="min-w-0 truncate">{file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{changeKindLabel(file.changeKind)}</span></button>)}</div><p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">安全な復元はM4でこの画面から開始します。履歴を選択しただけでは現在の作業は変わりません。</p></CardContent></Card> : <Card><CardContent><p className="py-8 text-center text-sm text-slate-500">左から保存を選択してください。</p></CardContent></Card>}{fileDiff && <DiffPanel diff={fileDiff} />}</div></div>;
+}
+
+function ProjectTagEditor({ tags, busy, onSave }: { tags: string[]; busy: boolean; onSave: (tags: string[]) => void }) {
+  const [draftTags, setDraftTags] = useState<string[]>(tags);
+  const [input, setInput] = useState("");
+  const tagKey = tags.join("\u0000");
+  const hasUnsavedChanges = normalizeTags(draftTags).join("\u0000") !== normalizeTags(tags).join("\u0000");
+
+  useEffect(() => {
+    setDraftTags(tags);
+    setInput("");
+  }, [tagKey]);
+
+  const addInputTags = () => {
+    const additions = parseTags(input);
+    if (!additions.length) return;
+    setDraftTags((current) => normalizeTags([...current, ...additions]));
+    setInput("");
+  };
+
+  return <div><p className="text-sm font-semibold">Projectタグ</p><p className="mt-1 text-sm text-slate-600">複数のタグを設定できます。タグはアプリ内の管理Project検索・絞り込みに使用します。</p><div className="mt-4 flex flex-wrap gap-2">{draftTags.length ? draftTags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">{tag}<button type="button" className="rounded-full px-1 text-sky-700 hover:bg-sky-100" onClick={() => setDraftTags((current) => current.filter((item) => item !== tag))} disabled={busy} aria-label={`${tag}タグを削除`}>×</button></span>) : <span className="text-sm text-slate-500">タグはまだ設定されていません。</span>}</div><div className="mt-4 flex flex-wrap gap-2"><div className="relative min-w-56 flex-1"><input className="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-sm" value={input} maxLength={80} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addInputTags(); } }} placeholder="例: Avatar、作業中" disabled={busy} />{input && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" onClick={() => setInput("")} disabled={busy} aria-label="タグ入力をクリア" title="タグ入力をクリア"><ClearIcon /></button>}</div><Button variant="secondary" onClick={addInputTags} disabled={busy || !input.trim()}>タグを追加</Button></div><div className="mt-4 flex flex-wrap justify-end gap-2"><Button variant={hasUnsavedChanges ? "danger" : "primary"} onClick={() => onSave(draftTags)} disabled={busy || !hasUnsavedChanges}>タグを保存</Button><Button variant="secondary" onClick={() => setDraftTags([])} disabled={busy || !draftTags.length}>タグ全消去</Button></div></div>;
+}
+
+function RepositorySettingsPage({ project, settings, initializationPreview, ignorePreview, busy, onPreviewInitialization, onApplyInitialization, onCancelInitialization, onOpenGlobalDefaults, onUpdateTags, onUpdateVpm, onPreviewIgnore, onApplyIgnore }: { project: ProjectDiagnostic; settings: SettingsLoadResult | null; initializationPreview: RepositoryInitializationPreview | null; ignorePreview: RepositoryIgnorePreview | null; busy: boolean; onPreviewInitialization: () => void; onApplyInitialization: () => void; onCancelInitialization: () => void; onOpenGlobalDefaults: () => void; onUpdateTags: (tags: string[]) => void; onUpdateVpm: (policy: VpmTrackingPolicy | null) => void; onPreviewIgnore: () => void; onApplyIgnore: () => void }) {
+  const repositoryRoot = project.repository.root;
+  const override = repositoryRoot
+    ? settings?.settings.repositorySettings.find((item) => item.repositoryRoot === repositoryRoot)?.vpmTrackingPolicyOverride ?? null
+    : null;
+  const effectivePolicy = override ?? settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES";
+  const effectiveLabel = effectivePolicy === "INCLUDE_PACKAGES" ? "含める" : "除外する";
+  const hasMissingRules = ignorePreview?.ignoreFiles.some((file) => file.missingRules.length > 0) ?? false;
+  const managedProject = settings?.settings.recentProjects.find((item) => item.path === project.path);
+  return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">このProjectの設定</h3><p className="mt-1 text-xs text-slate-500">タグやrepository設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent><ProjectTagEditor tags={managedProject?.tags ?? []} busy={busy} onSave={onUpdateTags} /></CardContent></Card><Card><CardHeader><h3 className="font-semibold">このrepositoryの設定</h3><p className="mt-1 text-xs text-slate-500">設定はアプリのsettings.jsonに保存され、このrepositoryのファイルは変更しません。</p></CardHeader><CardContent className="space-y-5"><div className="rounded-xl bg-slate-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">実効値: {effectiveLabel}（{override ? "repository固有の設定" : "全体設定の既定値"}）</p></div><StatusPill label={effectiveLabel} tone="neutral" /></div>{repositoryRoot ? <div className="mt-4 flex flex-wrap gap-2"><Button variant={override === null ? "primary" : "secondary"} onClick={() => onUpdateVpm(null)} disabled={busy}>全体設定に従う</Button><Button variant={override === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={override === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div> : <p className="mt-4 text-sm text-slate-600">repositoryが未作成のため、全体設定の既定値を使用します。</p>}<Button className="mt-3" variant="ghost" onClick={onOpenGlobalDefaults}>全体の既定値を開く</Button></div><div className="grid gap-3 md:grid-cols-2"><DiagnosticItem label=".gitignore" status={project.sourceControl.gitignore.status} summary={project.sourceControl.gitignore.summary} /><DiagnosticItem label="VPM packages" status={project.sourceControl.vpmPackages.status} summary={project.sourceControl.vpmPackages.summary} /></div></CardContent></Card><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">ignore rule</h3><p className="mt-1 text-xs text-slate-500">不足しているruleだけを確認して追加します。既存ruleは削除しません。</p></div><Button variant="secondary" onClick={onPreviewIgnore} disabled={busy || !project.repository.detected}>不足ruleを確認</Button></div></CardHeader><CardContent>{ignorePreview ? <div className="space-y-3">{ignorePreview.ignoreFiles.map((file) => <div key={file.path} className="rounded-xl bg-slate-50 px-4 py-3"><p className="text-sm font-semibold">{file.path}{file.willCreate ? "（新規作成）" : ""}</p>{file.missingRules.length ? <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{file.missingRules.join("\n")}</p> : <p className="mt-1 text-xs text-slate-500">不足ruleはありません。</p>}</div>)}{ignorePreview.blockingReason && <BlockingNotice tone="danger">{ignorePreview.blockingReason}</BlockingNotice>}{ignorePreview.canApply && hasMissingRules && <Button onClick={onApplyIgnore} disabled={busy}>この内容を適用</Button>}{ignorePreview.canApply && !hasMissingRules && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">現在のtemplateとの差分はありません。</p>}</div> : <p className="text-sm text-slate-600">確認すると、現在のtemplateとrepositoryのignore ruleとの差分を表示します。</p>}</CardContent></Card><Card><CardHeader><h3 className="font-semibold">project情報</h3></CardHeader><CardContent><dl className="grid gap-x-6 gap-y-4 text-sm md:grid-cols-2"><Definition label="project folder" value={project.path} /><Definition label="種別" value={projectKindLabel(project.projectKind)} /><Definition label="Unity" value={project.unityVersion ? `Unity ${project.unityVersion}` : "不明"} /><Definition label="repository" value={project.repository.detected ? "検出済み" : "未作成"} /></dl></CardContent></Card>{project.isUnityProject && !project.repository.detected && <RepositorySetup project={project} preview={initializationPreview} busy={busy} onPreview={onPreviewInitialization} onApply={onApplyInitialization} onCancel={onCancelInitialization} />}</div>;
+}
+
+function GlobalSettingsPage({ section, environment, settings, busy, onChangeSection, onUpdateVpm, onUpdateIgnoreTemplates, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { section: GlobalSettingsSection; environment: EnvironmentDiagnostic | null; settings: SettingsLoadResult | null; busy: boolean; onChangeSection: (section: GlobalSettingsSection) => void; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateIgnoreTemplates: (templates: IgnoreTemplateSettings) => void; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) {
+  return <div className="grid gap-5 lg:grid-cols-[13rem_1fr]"><Card className="h-fit"><CardContent className="space-y-1">{GLOBAL_SETTINGS_SECTIONS.map((item) => <button key={item.value} type="button" onClick={() => onChangeSection(item.value)} className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${section === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item.label}</button>)}</CardContent></Card><div>{section === "GENERAL" && <GeneralSettings settings={settings} />}{section === "DEFAULTS" && <DefaultSettings settings={settings} busy={busy} onUpdateVpm={onUpdateVpm} onUpdateIgnoreTemplates={onUpdateIgnoreTemplates} />}{section === "ENVIRONMENT" && <EnvironmentSettings environment={environment} />}{section === "LOGGING" && <LoggingSettings settings={settings} busy={busy} onUpdateLogLevel={onUpdateLogLevel} onOpenLogs={onOpenLogs} onOpenLogFolder={onOpenLogFolder} onExportLog={onExportLog} />}</div></div>;
+}
+
+function GeneralSettings({ settings }: { settings: SettingsLoadResult | null }) { return <Card><CardHeader><h3 className="font-semibold">一般</h3></CardHeader><CardContent><p className="text-sm text-slate-600">登録済みprojectはホームから選択します。存在しなくなったprojectはホームで「再指定」と表示されます。</p><p className="mt-4 text-xs text-slate-400">登録数: {settings?.recentProjects.length ?? 0} 件</p></CardContent></Card>; }
+function DefaultSettings({ settings, busy, onUpdateVpm, onUpdateIgnoreTemplates }: { settings: SettingsLoadResult | null; busy: boolean; onUpdateVpm: (policy: VpmTrackingPolicy) => void; onUpdateIgnoreTemplates: (templates: IgnoreTemplateSettings) => void }) { const policy = settings?.settings.vpmTrackingPolicy ?? "EXCLUDE_PACKAGES"; return <div className="space-y-5"><Card><CardHeader><h3 className="font-semibold">新規repositoryの既定値</h3><p className="mt-1 text-xs text-slate-500">既存repositoryには自動適用しません。</p></CardHeader><CardContent><p className="text-sm font-semibold">VPM packageのGit管理</p><p className="mt-1 text-sm text-slate-600">新しく選択したprojectの診断と初期化previewに使う既定値です。</p><div className="mt-4 flex gap-2"><Button variant={policy === "EXCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("EXCLUDE_PACKAGES")} disabled={busy}>除外する</Button><Button variant={policy === "INCLUDE_PACKAGES" ? "primary" : "secondary"} onClick={() => onUpdateVpm("INCLUDE_PACKAGES")} disabled={busy}>含める</Button></div></CardContent></Card><IgnoreTemplateEditor settings={settings} busy={busy} onSave={onUpdateIgnoreTemplates} /></div>; }
+
+function IgnoreTemplateEditor({ settings, busy, onSave }: { settings: SettingsLoadResult | null; busy: boolean; onSave: (templates: IgnoreTemplateSettings) => void }) {
+  const [unityText, setUnityText] = useState("");
+  const [vpmText, setVpmText] = useState("");
+  const unitySource = settings?.settings.ignoreTemplates.unityRules.join("\n") ?? "";
+  const vpmSource = settings?.settings.ignoreTemplates.vpmExcludeRules.join("\n") ?? "";
+  useEffect(() => setUnityText(unitySource), [unitySource]);
+  useEffect(() => setVpmText(vpmSource), [vpmSource]);
+  return <Card><CardHeader><h3 className="font-semibold">ignore template</h3><p className="mt-1 text-xs text-slate-500">新規repositoryの初期化と、既存repositoryの不足rule previewに使います。既存repositoryへ自動適用はしません。</p></CardHeader><CardContent className="space-y-4"><label className="block text-sm font-semibold" htmlFor="unity-ignore-template">Unity rules</label><textarea id="unity-ignore-template" className="min-h-48 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs leading-5" value={unityText} onChange={(event) => setUnityText(event.target.value)} disabled={busy || !settings} spellCheck={false} /><label className="block text-sm font-semibold" htmlFor="vpm-ignore-template">VPM exclude rules</label><textarea id="vpm-ignore-template" className="min-h-32 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs leading-5" value={vpmText} onChange={(event) => setVpmText(event.target.value)} disabled={busy || !settings} spellCheck={false} /><div className="flex items-center justify-between gap-3"><p className="text-xs text-slate-500">空行とコメントはtemplateの一部として保持します。</p><Button onClick={() => onSave({ unityRules: parseTemplateText(unityText), vpmExcludeRules: parseTemplateText(vpmText) })} disabled={busy || !settings}>templateを保存</Button></div></CardContent></Card>;
+}
+function EnvironmentSettings({ environment }: { environment: EnvironmentDiagnostic | null }) { return <div className="grid gap-5 md:grid-cols-2"><SummaryTile label="実行環境" value={environment ? `${environment.platform.os} / ${environment.platform.architecture}` : "確認中"} detail="正式対応: Windows / Apple Silicon macOS" tone={environment?.platform.supported ? "good" : "warn"} /><SummaryTile label="System Git" value={environment?.git.status === "AVAILABLE" ? "利用可能" : "未検出"} detail={environment?.git.version ?? "PATHから検出します"} tone={environment?.git.status === "AVAILABLE" ? "good" : "warn"} /></div>; }
+function LoggingSettings({ settings, busy, onUpdateLogLevel, onOpenLogs, onOpenLogFolder, onExportLog }: { settings: SettingsLoadResult | null; busy: boolean; onUpdateLogLevel: (level: string) => void; onOpenLogs: () => void; onOpenLogFolder: () => void; onExportLog: () => void }) { return <Card><CardHeader><h3 className="font-semibold">ログと診断</h3><p className="mt-1 text-xs text-slate-500">ログレベルの変更は即時適用され、次回起動後も保持されます。</p></CardHeader><CardContent><label className="text-sm font-semibold" htmlFor="log-level">ログレベル</label><select id="log-level" className="mt-2 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={settings?.settings.logLevel ?? "INFO"} onChange={(event) => onUpdateLogLevel(event.target.value)} disabled={busy || !settings}>{LOG_LEVEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><p className="mt-3 text-sm leading-6 text-slate-600">ログ表示では、30日保持の対象となるサニタイズ済みログをすべて表示します。</p><div className="mt-5 flex flex-wrap gap-2"><Button variant="secondary" onClick={onOpenLogs} disabled={busy}>ログ表示</Button><Button variant="secondary" onClick={onOpenLogFolder} disabled={busy}>ログフォルダ</Button><Button onClick={onExportLog} disabled={busy}>診断ログを書き出す</Button></div></CardContent></Card>; }
+
+function SummaryTile({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail: string; tone?: "good" | "warn" | "neutral" }) { return <Card><CardContent><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p><div className="mt-3 flex items-center justify-between gap-2"><p className="font-semibold text-slate-800">{value}</p><StatusPill label={tone === "good" ? "OK" : tone === "warn" ? "確認" : "情報"} tone={tone} /></div><p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p></CardContent></Card>; }
+function ChangedFiles({ files, onSelect }: { files: WorktreeSnapshot["files"]; onSelect: (path: string) => void }) { return files.length ? <div className="mt-4 space-y-2">{files.map((file) => <button type="button" onClick={() => onSelect(file.path)} key={`${file.path}-${file.oldPath ?? ""}`} className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm transition hover:bg-slate-100"><span className="min-w-0 truncate text-slate-700" title={file.path}>{file.path}{file.oldPath ? ` ← ${file.oldPath}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{changeKindLabel(file.changeKind)}{file.outsideProject ? " · project外" : ""}</span></button>)}</div> : <p className="mt-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-500">保存対象の変更はありません。</p>; }
+function DiagnosticSummary({ project, onGoToSettings }: { project: ProjectDiagnostic; onGoToSettings: () => void }) { return <Card><CardHeader><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">projectの診断</h3><p className="mt-1 text-xs text-slate-500">詳細な設定とignore ruleはリポジトリ設定で確認できます。</p></div><Button variant="secondary" onClick={onGoToSettings}>リポジトリ設定</Button></div></CardHeader><CardContent>{project.issues.length ? <div className="space-y-2">{project.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className={issueClass(issue.severity)}><p className="text-sm font-medium">{issue.message}</p><p className="mt-1 text-xs opacity-70">{issue.code}{shouldShowIssuePath(issue) ? ` · ${issue.path}` : ""}</p></div>)}</div> : <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">現在の診断範囲では、修正が必要な状態は見つかりませんでした。</p>}</CardContent></Card>; }
+function DiffPanel({ diff }: { diff: FileDiff }) { return <Card><CardHeader><h3 className="truncate font-semibold" title={diff.path}>{diff.path}</h3><p className="mt-1 text-xs text-slate-500">{diff.kind === "TEXT" ? "テキスト差分" : diff.kind === "BINARY" ? "バイナリファイル" : "表示不可"}</p></CardHeader><CardContent>{diff.patch ? <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">{diff.patch}</pre> : <p className="rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">{diff.truncationReason ?? "テキストとして表示できません。"}</p>}{diff.truncated && <p className="mt-3 text-xs text-amber-700">{diff.truncationReason}</p>}</CardContent></Card>; }
+function BlockingNotice({ children, tone = "warn" }: { children: string; tone?: "warn" | "danger" }) { return <p className={`mt-4 rounded-xl px-3 py-2 text-sm ${tone === "danger" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-800"}`}>{children}</p>; }
+function DiagnosticItem({ label, status, summary }: { label: string; status: ProjectDiagnostic["sourceControl"]["gitignore"]["status"]; summary: string }) { const tone = status === "HEALTHY" ? "border-emerald-200 bg-emerald-50" : status === "NOT_APPLICABLE" ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50"; return <div className={`rounded-xl border px-3 py-3 ${tone}`}><p className="text-xs font-semibold text-slate-700">{label}</p><p className="mt-1 text-xs leading-5 text-slate-600">{summary}</p></div>; }
+function Definition({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs font-semibold text-slate-400">{label}</dt><dd className="mt-1 break-all text-slate-700">{value}</dd></div>; }
+function ErrorNotice({ error, onDismiss }: { error: AppError; onDismiss: () => void }) { return <div className="mb-5 flex items-start justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800"><div><p className="font-semibold">{error.message}</p><p className="mt-1 text-xs text-rose-700">{error.code}{error.mayHaveMutated ? " · 状態が変化した可能性があります" : ""}</p></div><button className="text-xs font-semibold underline" onClick={onDismiss}>閉じる</button></div>; }
+function RecoveryNotice({ settings }: { settings: SettingsLoadResult }) { return <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">settings.json を保全して初期設定を再生成しました。{settings.backupPath ? ` 退避先: ${settings.backupPath}` : ""}</div>; }
+
+function currentWindowLabel() { try { return getCurrentWindow().label; } catch { return undefined; } }
+function normalizeError(error: unknown): AppError { if (isAppError(error)) return error; return { code: "INTERNAL_ERROR", message: "処理に失敗しました。Vsedi のログを確認してください。", technicalDetail: null, operation: null, mayHaveMutated: false }; }
+function projectName(path: string) { const parts = path.split(/[\\/]/).filter(Boolean); return parts.at(-1) ?? path; }
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ja-JP"); }
+function ProjectTagBadges({ tags }: { tags: string[] }) { return tags.length ? <div className="flex flex-wrap gap-1">{tags.map((tag) => <span key={tag} className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{tag}</span>)}</div> : null; }
+function parseTags(value: string) { return normalizeTags(value.split(/[\n,、]/)); }
+function normalizeTags(tags: string[]) { return tags.map((tag) => tag.trim()).filter(Boolean).filter((tag, index, values) => values.indexOf(tag) === index).slice(0, 20); }
+function parseTemplateText(value: string) { const lines = value.replace(/\r\n/g, "\n").split("\n"); return lines.at(-1) === "" ? lines.slice(0, -1) : lines; }
+function compareManagedProjects(left: SettingsLoadResult["recentProjects"][number], right: SettingsLoadResult["recentProjects"][number]) { return (right.lastOpenedAt ?? "").localeCompare(left.lastOpenedAt ?? "") || left.path.localeCompare(right.path, "ja"); }
+function projectStatusLabel(status: ProjectDiagnostic["status"]) { return status === "MANAGEABLE" ? "管理可能" : status === "NEEDS_ATTENTION" ? "要確認" : "非 Unity"; }
+function projectKindLabel(kind: ProjectDiagnostic["projectKind"]) { const labels: Record<ProjectDiagnostic["projectKind"], string> = { UNITY: "Unity project", VRCHAT_AVATAR: "VRChat Avatar", VRCHAT_WORLD: "VRChat World", VRCHAT_UNKNOWN: "VRChat 種別不明" }; return labels[kind]; }
+function changeKindLabel(kind: WorktreeSnapshot["files"][number]["changeKind"]) { const labels: Record<WorktreeSnapshot["files"][number]["changeKind"], string> = { ADDED: "追加", MODIFIED: "変更", DELETED: "削除", RENAMED: "名前変更", COPIED: "複製", TYPE_CHANGED: "種類変更", UNMERGED: "競合", UNTRACKED: "未管理" }; return labels[kind]; }
+function issueClass(severity: ProjectDiagnostic["issues"][number]["severity"]) { return severity === "ERROR" ? "rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800" : severity === "WARNING" ? "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900" : "rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-800"; }
+function shouldShowIssuePath(issue: ProjectDiagnostic["issues"][number]) { return issue.code !== "GIT_ROOT_OUTSIDE_PROJECT" && Boolean(issue.path); }
+
+const GLOBAL_SETTINGS_SECTIONS: { value: GlobalSettingsSection; label: string }[] = [{ value: "GENERAL", label: "一般" }, { value: "DEFAULTS", label: "新規repositoryの既定値" }, { value: "ENVIRONMENT", label: "実行環境" }, { value: "LOGGING", label: "ログと診断" }];
+const LOG_LEVEL_OPTIONS = [{ value: "ERROR", label: "ERROR — エラーのみ" }, { value: "WARN", label: "WARN — 警告以上" }, { value: "INFO", label: "INFO — 通常" }, { value: "DEBUG", label: "DEBUG — 詳細" }, { value: "TRACE", label: "TRACE — 最詳細" }] as const;
 
 export default App;

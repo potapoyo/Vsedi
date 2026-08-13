@@ -14,11 +14,18 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tracing::{debug, info};
 
 pub fn inspect_project(
     path: &str,
     vpm_tracking_policy: VpmTrackingPolicy,
 ) -> AppResult<ProjectDiagnostic> {
+    debug!(
+        operation = "inspect_project",
+        project_path = %path,
+        vpm_tracking_policy = ?vpm_tracking_policy,
+        "project inspection started"
+    );
     let requested = Path::new(path);
     validate_requested_path(requested)?;
 
@@ -76,7 +83,7 @@ pub fn inspect_project(
         }
         let repository = inspect_repository(&root, &mut issues);
         let is_git_repository = repository.detected;
-        return Ok(ProjectDiagnostic {
+        let diagnostic = ProjectDiagnostic {
             path: root.to_string_lossy().into_owned(),
             status: ProjectStatus::NotUnity,
             is_unity_project: false,
@@ -92,7 +99,16 @@ pub fn inspect_project(
             source_control: not_applicable_source_control(),
             issues,
             is_git_repository,
-        });
+        };
+        info!(
+            operation = "inspect_project",
+            project_path = %diagnostic.path,
+            status = ?diagnostic.status,
+            is_unity_project = false,
+            issue_count = diagnostic.issues.len(),
+            "project inspection completed"
+        );
+        return Ok(diagnostic);
     }
 
     let (unity_version, unity_revision) = read_unity_metadata(&project_version_path, &mut issues);
@@ -113,7 +129,7 @@ pub fn inspect_project(
         ProjectStatus::Manageable
     };
 
-    Ok(ProjectDiagnostic {
+    let diagnostic = ProjectDiagnostic {
         path: root.to_string_lossy().into_owned(),
         status,
         is_unity_project: true,
@@ -125,7 +141,16 @@ pub fn inspect_project(
         source_control,
         issues,
         is_git_repository,
-    })
+    };
+    info!(
+        operation = "inspect_project",
+        project_path = %diagnostic.path,
+        status = ?diagnostic.status,
+        project_kind = ?diagnostic.project_kind,
+        issue_count = diagnostic.issues.len(),
+        "project inspection completed"
+    );
+    Ok(diagnostic)
 }
 
 fn validate_requested_path(requested: &Path) -> AppResult<()> {

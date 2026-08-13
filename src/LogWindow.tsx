@@ -35,7 +35,7 @@ export function LogWindow() {
   return (
     <main className="flex h-screen flex-col bg-mist p-6 text-ink">
       <header className="pb-4">
-        <p className="text-xs text-slate-500">1秒ごとに最新ログを読み込みます。{logs?.currentFile ? ` 現在のファイル: ${logs.currentFile}` : ""}</p>
+        <p className="text-xs text-slate-500">1秒ごとに保持期間内のログをすべて読み込みます。{logs?.currentFile ? ` 現在のファイル: ${logs.currentFile}` : ""}{logs ? ` 表示行数: ${logs.lines.length}` : ""}</p>
       </header>
 
       {error && (

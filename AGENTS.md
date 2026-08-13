@@ -59,3 +59,13 @@ identityを明示できないツールでCodexがコミットを作成する必�
 GitのAuthor / Committerはコミットオブジェクトに保存される文字列メタデータであり、この運用では `Codex` と表示する。一方、GitHub上で表示されるpush、PR、Issue、コメントなどの操作ユーザーは、GitHubへ接続しているアカウントまたはtokenの認証主体で決まる。このルールだけでは、GitHubの認証主体を `Codex` に変更できない。
 
 したがって、Codexが作成したコミットは `Author=Codex` / `Committer=Codex` として識別できても、そのコミットをpushしたユーザー、PRを作成したユーザー、Issueを操作したユーザーは、引き続き認証中のGitHubアカウントとして記録される。また、このidentityは表示上の識別であり、暗号学的な署名やGitHubアカウントによる本人確認を意味しない。
+
+## GitHub CLIを優先したGit運用
+
+CodexがGitまたはGitHub関連のコマンドを実行するときは、最初に次を実行してGitHub CLIの認証状態を確認する。
+
+```sh
+gh auth status
+```
+
+`gh`が利用可能であることを確認した後、GitHub上の操作（workflowの実行・確認、remoteへのpush、ActionsやPRの確認など）は`gh`を優先して行う。`gh`に同等の機能がないローカル操作（作業ツリー確認、ステージ、コミットなど）に限り、通常の`git`コマンドを使用する。認証確認に失敗した場合は、GitHub側の操作を先に進めず、状態と必要な再認証を報告する。

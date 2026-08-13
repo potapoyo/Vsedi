@@ -32,7 +32,10 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - VRChat / VPM project の可能性を診断できる
 - Avatar SDK と Worlds SDK が同居する project は非対応エラーとして停止できる
 - Git repository の有無を検出できる
-- 最近利用した project を一覧できる
+- 管理している project を最終更新順で一覧できる
+- project ごとに複数のアプリ内タグを設定し、タグで一覧を絞り込める
+- Project名、project path、タグを対象に管理Projectを検索できる
+- 管理Project一覧で、Avatarは人物アイコン、Worldは地球儀アイコンを表示し、マウスオーバーで種別を確認できる
 - project folder を Finder / Explorer で開ける
 - Unity で開く導線を提供できる
 
@@ -42,6 +45,7 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 - Git version を表示できる
 - `.gitignore` の状態を診断できる
 - VPM packageをGit管理から除外するか含めるかを設定できる
+- repositoryごとにVPM package追跡方針を上書きし、実効値の由来を確認できる
 - 選択したVPM追跡方針からの明らかな逸脱を警告できる
 - Git repository rootがUnity project外にある状態を正常な構成として情報表示できる
 - project 設定ファイルを読み取れない場合に警告し、読み取れる範囲の診断を継続できる
@@ -50,6 +54,8 @@ Git は ADR 0001 に従ってシステム Git CLI を利用するため、Git �
 
 - 未初期化 project で Git repository を作成できる
 - Unity / VRChat 向け ignore rule を提案できる
+- 新規repository向けのUnity / VPM ignore templateを設定画面から編集できる
+- 既存repositoryの不足ignore ruleを確認し、既存内容を削除せず追加できる
 - 既存 `.gitignore` を無断で置換しない
 - 必要な変更を preview してから適用できる
 
@@ -103,7 +109,7 @@ ADR 0007 に従い、PC を失った場合でも制作環境を再構成しや�
 - 初回チュートリアル完了状態、最近利用したプロジェクト、UI 設定等をローカルファイルへ保存できる
 - 初期実装では Tauri Store を使用し、OS 標準のアプリデータ領域へ `settings.json` として保存する
 - `settings.json` は Explorer / Finder 等から通常のファイルとしてコピーできること
-- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、VPM追跡方針追加後の現行schemaは `2` とする
+- `settings.json` は整数の `schemaVersion` を必須とし、初期schemaは `1`、単一カテゴリ追加後は `4`、repository固有設定追加後は `5`、複数タグ移行後の現行schemaは `6` とする
 - 対応する `settings.json` を所定のアプリデータ領域へ手動配置した場合、Vsedi が通常の設定ファイルとして読み込めること
 - 古い schema は可能な範囲で migration し、未対応 schema や破損 JSON を黙って上書きしないこと
 - 手動復元された設定内の旧 PC の path が存在しない場合は、クラッシュせず再選択・再登録を促すこと

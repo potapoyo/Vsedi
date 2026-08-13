@@ -1,28 +1,20 @@
 {
-  "screens": {
-    "main": {
-      "title": "メイン画面の基本表示",
-      "url": "/",
-      "navigations": [],
-      "assertions": [
-        { "type": "element", "selector": "h1", "text": "Vsedi" },
-        { "type": "element", "selector": "main", "text": "実行環境" },
-        { "type": "element", "selector": "main", "text": "System Git" },
-        { "type": "button", "selector": "button", "text": "フォルダを選択" }
-      ],
-      "screenshot": { "onSuccess": true, "onFailure": true }
+  "cases": {
+    "home-project-management": {
+      "title": "ホームのProject管理・お知らせ・検索",
+      "screenshot": true
     },
-    "settings": {
-      "title": "診断済み project の設定表示",
-      "url": "/",
-      "navigations": [],
-      "assertions": [
-        { "type": "element", "selector": "main", "text": "VPM packageのGit管理" },
-        { "type": "element", "selector": "main", "text": "VPM packages" },
-        { "type": "element", "selector": "main", "text": "/fixtures/test-project" },
-        { "type": "button", "selector": "button", "text": "除外する" }
-      ],
-      "screenshot": { "onSuccess": true, "onFailure": true }
+    "repository-work-history": {
+      "title": "現在の作業から保存履歴・diffまで",
+      "screenshot": true
+    },
+    "repository-settings": {
+      "title": "リポジトリ設定のタグ・VPM方針",
+      "screenshot": true
+    },
+    "global-settings": {
+      "title": "全体設定の画面切り替え",
+      "screenshot": true
     }
   }
 }

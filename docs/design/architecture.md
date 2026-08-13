@@ -10,6 +10,8 @@ Web フロントエンドは状態表示とユーザー操作の受付を担当�
 
 Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から TypeScript 型を生成する。
 
+メインウィンドウの画面遷移、repository workspace、全体設定とrepository設定の境界は [`application-navigation-and-settings.md`](application-navigation-and-settings.md) に従う。
+
 M1 の実装は `src-tauri/src` に次の境界を持つ。`commands` は Tauri の薄い入口、`services` はユースケース、`git` / `platform` / `settings` は具体的な外部状態との接続を担当する。
 
 ```text
@@ -99,7 +101,7 @@ M1 で実装する command contract は次のとおりである。
 | Command | 入力 | 戻り値 | 用途 |
 | --- | --- | --- | --- |
 | `inspect_environment` | なし | `EnvironmentDiagnostic` | OS / architecture / Git 診断 |
-| `inspect_project` | `path: string`, `vpmTrackingPolicy` | `ProjectDiagnostic` | Unity project と repository の診断 |
+| `inspect_project` | `path: string` | `ProjectDiagnostic` | Unity project と repository の診断。VPM方針は設定から解決 |
 | `load_settings` | なし | `SettingsLoadResult` | 設定読込と stale path の状態表示 |
 | `save_settings` | `AppSettings` | `void` | 許可された内部設定の保存 |
 | `export_diagnostic_log` | `destination: string` | `void` | redaction 済み診断ログの書出し |
@@ -192,7 +194,7 @@ symlink、junction、nested repository、worktree は、対応済みとして扱
 例:
 
 - onboarding 完了状態
-- 最近利用した project path
+- 管理対象の project path、最終更新日時、アプリ内タグ
 - secret ではない UI 設定
 - window state
 
@@ -212,7 +214,7 @@ PC 初期化・買い替え後の再構成に利用できる、バージョン�
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-M1 の `settings.json` は `schemaVersion: 1` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。最近利用した project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。
+`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4の単一カテゴリはschema 6で複数タグへ移行し、repositoryごとのVPM追跡方針overrideもschema 6で保持する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
 
 ## Rust / TypeScript 型境界
 

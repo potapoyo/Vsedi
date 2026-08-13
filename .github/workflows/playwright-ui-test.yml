@@ -1,0 +1,68 @@
+name: UI Test — Playwright (Windows / macOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-case:
+        description: "テストケース名（空欄で全ケース）"
+        required: false
+        default: ""
+  pull_request:
+    paths:
+      - ".github/workflows/playwright-ui-test.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "playwright.config.ts"
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-test:
+    name: Playwright — ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            architecture: x86_64
+          - os: macos-14
+            platform: macos
+            architecture: aarch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      UI_TEST_CASE: ${{ inputs.test-case }}
+      UI_TEST_PLATFORM: ${{ matrix.platform }}
+      UI_TEST_ARCHITECTURE: ${{ matrix.architecture }}
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install chromium
+      - run: pnpm test:ui
+      - name: Upload UI test artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
