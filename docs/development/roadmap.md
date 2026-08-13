@@ -21,7 +21,7 @@
 - フロントエンド技術構成が ADR で決まっている
 - 設定 / 環境バックアップ方針と Rust / TypeScript 型共有方針が ADR で決まっている
 
-## M1 — Tauri 基盤（実装中）
+## M1 — Tauri 基盤（完了）
 
 目的: Windows / Apple Silicon macOS で共通のアプリ基盤と Rust command boundary を作る。
 
@@ -93,7 +93,7 @@
 
 - 選択 project について「管理可能 / 要修正 / 非 Unity」を説明できる
 
-## M3 — ローカル保存
+## M3 — ローカル保存（完了）
 
 目的: 最初に実用になる Vsedi を作る。
 
@@ -114,7 +114,7 @@
 
 > Unity project を登録し「作業を保存」を押すと、その時点が履歴に残る。
 
-この段階を Internal Alpha 候補とする。
+この段階を Internal Alpha 候補とする。実装および Windows / Apple Silicon macOS 配布物の確認まで完了している。
 
 ## M4 — 安全な復元
 

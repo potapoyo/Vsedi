@@ -7,6 +7,9 @@ use crate::{
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
+const HISTORY_FIELD_SEPARATOR: char = '\x1f';
+const HISTORY_RECORD_SEPARATOR: char = '\x1e';
+
 pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
     debug!(operation = "read_history", project_path = %project_path, "history read started");
     let (git, root) = repository(project_path)?;
@@ -17,7 +20,14 @@ pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
     }
     let output = run_git(
         &git,
-        &["log", "-n", "50", "--format=%H%x00%h%x00%s%x00%aI%x00"],
+        &[
+            "log",
+            "-n",
+            "50",
+            "--no-decorate",
+            "--no-color",
+            "--pretty=format:%H%x1f%h%x1f%s%x1f%aI%x1e",
+        ],
         Some(&root),
     )
     .map_err(read_error)?;
@@ -30,12 +40,7 @@ pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
             false,
         ));
     }
-    let values = output
-        .stdout
-        .split('\0')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>();
+    let values = parse_history_fields(&output.stdout)?;
     if values.len() % 4 != 0 {
         return Err(AppError::simple(
             ErrorCode::HistoryReadFailed,
@@ -60,6 +65,62 @@ pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
     Ok(entries)
 }
 
+fn parse_history_fields(output: &str) -> AppResult<Vec<String>> {
+    let mut fields = Vec::new();
+    for record in output
+        .split(HISTORY_RECORD_SEPARATOR)
+        .map(|record| record.trim_matches(['\r', '\n']))
+        .filter(|record| !record.is_empty())
+    {
+        let record_fields = record.split(HISTORY_FIELD_SEPARATOR).collect::<Vec<_>>();
+        if record_fields.len() != 4
+            || record_fields[0].trim().is_empty()
+            || record_fields[1].trim().is_empty()
+            || record_fields[3].trim().is_empty()
+        {
+            return Err(AppError::simple(
+                ErrorCode::HistoryReadFailed,
+                "保存履歴を安全に解析できませんでした。",
+                "read_history",
+            ));
+        }
+        fields.extend([
+            record_fields[0].trim().to_owned(),
+            record_fields[1].trim().to_owned(),
+            record_fields[2].to_owned(),
+            record_fields[3].trim().to_owned(),
+        ]);
+    }
+    Ok(fields)
+}
+
+fn parse_commit_metadata(output: &str) -> AppResult<[String; 5]> {
+    let record = output
+        .split(HISTORY_RECORD_SEPARATOR)
+        .next()
+        .unwrap_or_default()
+        .trim_matches(['\r', '\n']);
+    let fields = record.split(HISTORY_FIELD_SEPARATOR).collect::<Vec<_>>();
+    if fields.len() != 5
+        || fields[0].trim().is_empty()
+        || fields[1].trim().is_empty()
+        || fields[3].trim().is_empty()
+    {
+        return Err(AppError::simple(
+            ErrorCode::HistoryReadFailed,
+            "保存履歴を安全に解析できませんでした。",
+            "read_commit_detail",
+        ));
+    }
+    Ok([
+        fields[0].trim().to_owned(),
+        fields[1].trim().to_owned(),
+        fields[2].to_owned(),
+        fields[3].trim().to_owned(),
+        fields[4].trim().to_owned(),
+    ])
+}
+
 pub fn read_commit_detail(project_path: &str, commit_id: &str) -> AppResult<CommitDetail> {
     debug!(operation = "read_commit_detail", project_path = %project_path, commit_id = %commit_id, "commit detail read started");
     if !is_object_id(commit_id) {
@@ -75,7 +136,9 @@ pub fn read_commit_detail(project_path: &str, commit_id: &str) -> AppResult<Comm
         &[
             "show",
             "-s",
-            "--format=%H%x00%h%x00%s%x00%aI%x00%P%x00",
+            "--no-decorate",
+            "--no-color",
+            "--pretty=format:%H%x1f%h%x1f%s%x1f%aI%x1f%P%x1e",
             commit_id,
         ],
         Some(&root),
@@ -90,19 +153,7 @@ pub fn read_commit_detail(project_path: &str, commit_id: &str) -> AppResult<Comm
             false,
         ));
     }
-    let values = metadata
-        .stdout
-        .split('\0')
-        .take(5)
-        .map(str::trim)
-        .collect::<Vec<_>>();
-    if values.len() != 5 {
-        return Err(AppError::simple(
-            ErrorCode::HistoryReadFailed,
-            "保存履歴を安全に解析できませんでした。",
-            "read_commit_detail",
-        ));
-    }
+    let values = parse_commit_metadata(&metadata.stdout)?;
     let files_output = run_git(
         &git,
         &[
@@ -127,10 +178,10 @@ pub fn read_commit_detail(project_path: &str, commit_id: &str) -> AppResult<Comm
         ));
     }
     let detail = CommitDetail {
-        commit_id: values[0].to_owned(),
-        short_commit_id: values[1].to_owned(),
-        memo: values[2].to_owned(),
-        author_time: values[3].to_owned(),
+        commit_id: values[0].clone(),
+        short_commit_id: values[1].clone(),
+        memo: values[2].clone(),
+        author_time: values[3].clone(),
         parent_ids: values[4]
             .split_whitespace()
             .map(ToOwned::to_owned)
@@ -258,6 +309,41 @@ fn file(path: &str, old_path: Option<String>, change_kind: ChangeKind) -> Change
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_windows_git_log_records_with_trailing_newlines() {
+        let output = concat!(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x1faaaaaaa\x1ffirst save\x1f",
+            "2026-08-13T10:00:00+09:00\x1e\n",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\x1fbbbbbbb\x1fsecond save\x1f",
+            "2026-08-13T11:00:00+09:00\x1e\n",
+        );
+        let fields = parse_history_fields(output).unwrap();
+
+        assert_eq!(fields.len(), 8);
+        assert_eq!(fields[2], "first save");
+        assert_eq!(fields[4], "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    }
+
+    #[test]
+    fn parses_root_commit_metadata_without_parent() {
+        let output = concat!(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x1faaaaaaa\x1ffirst save\x1f",
+            "2026-08-13T10:00:00+09:00\x1f\x1e\n",
+        );
+        let metadata = parse_commit_metadata(output).unwrap();
+
+        assert_eq!(metadata[0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert!(metadata[4].is_empty());
+    }
+
+    #[test]
+    fn rejects_history_records_with_missing_fields() {
+        let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x1faaaaaaa\x1ffirst save\x1e\n";
+
+        assert!(parse_history_fields(output).is_err());
+    }
+
     #[test]
     fn parses_rename_status() {
         let files = parse_name_status("R100\0old file\0new file\0M\0Assets/a.txt\0").unwrap();
