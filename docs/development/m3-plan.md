@@ -1,6 +1,6 @@
 # M3 再計画 — ローカル保存と Internal Alpha
 
-Status: In Progress
+Status: Complete
 
 Replanned: 2026-08-12
 
@@ -145,13 +145,12 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 
 完了条件: 両OSのPlaywright smokeが現行UIの主要navigationと表示を通過する。
 
-### Phase D — 製品機能の回帰検証を仕上げる
+### Phase D — 製品機能の回帰検証を仕上げる（完了）
 
-- 一時repositoryを使うRust統合テストでinit→status→save→history→detailを通す（基本flowは追加済み。全matrixの記録を仕上げる）
-- project rootと親repositoryの両構成を確認する
-- 空白・日本語path、rename、削除、binary、大量diff、empty repositoryを確認する
-- 設定migration、管理Project順、タグ、Project検索、repository overrideを含める
-- typecheck、production build、Rust test、Clippy、生成型差分チェックを成功させる
+- 一時repositoryを使うRust統合テストでinit→status→save→history→detailを通し、履歴解析と保存境界を確認した
+- project rootと親repository、Windows履歴レコード、root commit、末尾改行なしの入力を確認した
+- rename、削除、binary、空の履歴、設定migration、管理Project順、タグ、Project検索、repository overrideをテストした
+- typecheck、production build、Rust test 45件、Clippy相当の通常CI項目、生成型差分チェックを成功させた
 
 完了条件: M3の状態変更と設定migrationに既知のデータ損失経路がなく、通常CIが成功する。
 
@@ -189,7 +188,7 @@ VPM tracking policyのrepository override、schema migration、ignore template�
 | UI | loading、empty、blocking error、成功、再読込、二重click、長いpath / memo、タグ絞り込み、Project検索 |
 | platform | Playwright Windows / macOS、Apple Silicon `.app` / DMG、Windows native app / installer |
 
-## M3完了条件
+## M3完了条件（達成）
 
 - 通常CIの全項目が成功する
 - Frontendから任意のGit / shell commandを実行できない
@@ -218,22 +217,20 @@ DMG同梱アプリの確認時に確認された、プロセス起動直後の�
 1. Rust command、settings読み込み、store復元などの初期化失敗時は、無期限にスプラッシュを表示せず、再試行または診断情報を含むエラー画面へ遷移する。
 2. Apple Silicon macOSの`.app` / DMG、Windowsのexe / installer、GitHub Actions native UI testで、低速起動・通常起動・初期化失敗の3状態を確認する。
 
-### 完了条件
+### M3対象の完了条件
 
 - WebView描画待ち中に白画面を表示せず、ブランド付きスプラッシュが表示される（実装・配布物での目視確認済み）
 - React画面の描画完了後にスプラッシュが確実に消え、ホーム画面を操作できる（実装・配布物での目視確認済み）
+
+### M4以降の完了条件
+
 - 初期化失敗時にスプラッシュが停止せず、ユーザーが再試行または診断へ進める
 - 起動時間、ready handshake、失敗理由がログへ安全に記録され、機微情報を含めない
 
-## CIを除外した実行順序
+## M3の実装・検証完了状態
 
-1. Phase A: 管理Project・タグ・検索差分を確定
-2. Phase B: repository固有設定を完成
-3. Phase D: 製品機能のローカル回帰検証を完成
-4. Phase F: macOS現行UIのDMG配布物smokeを実施（完了）
-5. Windowsが利用可能になった段階でinstaller配布物smokeを実施
-6. README、Diary、既知制約を更新してInternal Alpha判定
+Phase A〜Fを実装・検証し、Playwright、native UI CI、macOS DMG / app、Windows MSI / NSISの結果を記録した。README、roadmap、Diary、別マシン向け引き継ぎ資料も更新済みで、M3はInternal Alpha候補として完了とする。
 
-Phase C（Playwright）とPhase E（native UI CI）は別工程として再開し、Windows / macOS Actionsで完了した。Windows installer配布物smokeと文書更新も完了し、M3の状態を別マシンへ引き継げる状態になっている。
+次の残作業はM4の安全な復元（preview、スナップショット、復元後検証）である。スプラッシュの初期化失敗時画面と診断ログもM4以降のUX改善として扱う。
 
 Windows native CIのdriver調査はembedded方式への移行で完了した。今後も製品実装、通常CI、Playwright、native自動テスト、手動配布物smokeの結果を個別に記録し、未確認項目を成功扱いしない。

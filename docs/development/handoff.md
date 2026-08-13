@@ -43,10 +43,11 @@ pnpm install --frozen-lockfile
 ## 検証コマンド
 
 ```sh
-pnpm typecheck
-pnpm build
+CI=true pnpm typecheck
+CI=true pnpm build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --manifest-path src-tauri/Cargo.toml services::
+cargo test --manifest-path src-tauri/Cargo.toml
+CI=true pnpm check-generated-types
 pnpm exec tauri build
 ```
 
@@ -59,7 +60,7 @@ pnpm exec tauri build
 
 - アプリの設定・最近のProject一覧は各マシンのアプリデータに保存され、Git管理対象ではありません。別マシンではProjectを再登録してください。
 - リモート操作、過去状態への復元、履歴書換えは未実装です。これらはM4以降の対象です。
-- 以前の全Rustテストでは、`HOME`未設定環境に依存するログテスト1件が失敗しました。`services::` の24テストと履歴関連4テストは成功しています。
+- 現環境ではRustテスト45件がすべて成功しています。過去に`HOME`未設定環境ではログテスト1件が失敗したため、別マシンで再現した場合は`HOME`を設定してから再実行してください。
 - 配布物は未署名です。
 
 ## 次の開発候補
