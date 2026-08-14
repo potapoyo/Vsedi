@@ -20,7 +20,7 @@ const WORLD_PATH = "/fixtures/world-project";
 
 function settingsFixture() {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     onboardingCompleted: true,
     recentProjects: [
       { path: PROJECT_PATH, lastOpenedAt: "2026-08-13T00:00:00Z", tags: ["avatar", "featured"] },
@@ -83,6 +83,14 @@ function installTauriMocks(page: Page) {
           hasConflicts: false,
           hasExistingStagedChanges: false,
         },
+        repositoryTree: {
+          statusToken: "work-token",
+          files: [
+            { path: "Assets/avatar.txt", oldPath: null, changeKind: "MODIFIED", staged: false, unstaged: true, binary: false, outsideProject: false },
+            { path: "Assets/avatar-material.mat", oldPath: null, changeKind: null, staged: false, unstaged: false, binary: false, outsideProject: false },
+            { path: "Packages/manifest.json", oldPath: null, changeKind: null, staged: false, unstaged: false, binary: false, outsideProject: false },
+          ],
+        },
         history: [{ commitId: "1111111111111111111111111111111111111111", shortCommitId: "1111111", memo: "baseline", authorTime: "2026-08-12T12:00:00Z" }],
       },
       [worldPath]: {
@@ -107,14 +115,44 @@ function installTauriMocks(page: Page) {
       },
     } as Record<string, any>;
     const calls: string[] = [];
+    const callbacks = new Map<string, { callback: (event: any) => void; once: boolean }>();
+    const eventListeners = new Map<string, string[]>();
+    let nextCallbackId = 0;
     (window as unknown as { __mockCalls?: string[] }).__mockCalls = calls;
+    (window as unknown as { __mockState?: any }).__mockState = projects[projectPath];
 
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {
         metadata: { currentWindow: { label: "main" }, currentWebview: { windowLabel: "main", label: "main" } },
+        transformCallback: (callback: (event: any) => void, once = false) => {
+          const id = `mock-callback-${++nextCallbackId}`;
+          callbacks.set(id, { callback, once });
+          return id;
+        },
         invoke: async (command: string, args?: Record<string, any>) => {
           calls.push(command);
+          if (command === "plugin:event|listen") {
+            const listeners = eventListeners.get(args?.event) ?? [];
+            listeners.push(args?.handler);
+            eventListeners.set(args?.event, listeners);
+            return args?.handler;
+          }
+          if (command === "plugin:event|unlisten") {
+            const listeners = eventListeners.get(args?.event) ?? [];
+            eventListeners.set(args?.event, listeners.filter((id) => id !== args?.eventId));
+            callbacks.delete(args?.eventId);
+            return null;
+          }
+          if (command === "plugin:event|emit") {
+            for (const id of eventListeners.get(args?.event) ?? []) {
+              const listener = callbacks.get(id);
+              if (!listener) continue;
+              listener.callback({ event: args?.event, id, payload: args?.payload });
+              if (listener.once) callbacks.delete(id);
+            }
+            return null;
+          }
           const currentPath = args?.path ?? args?.projectPath ?? args?.request?.projectPath ?? projectPath;
           const state = projects[currentPath] ?? projects[projectPath];
           switch (command) {
@@ -142,10 +180,13 @@ function installTauriMocks(page: Page) {
             case "read_repository_state":
               return { root: state.project.repository.root, needsInitialization: false, hasHead: true, branchName: "main", canSave: true, blockingReason: null };
             case "read_worktree_snapshot":
-              return state.worktree;
+              return structuredClone(state.worktree);
+            case "read_repository_tree":
+              return structuredClone(state.repositoryTree ?? { statusToken: state.worktree.statusToken, files: state.worktree.files });
             case "read_history":
               return state.history;
             case "save_worktree": {
+              if (state.saveDelayMs) await new Promise((resolve) => setTimeout(resolve, state.saveDelayMs));
               const commitId = "2222222222222222222222222222222222222222";
               state.worktree = { ...state.worktree, files: [] };
               state.history = [{ commitId, shortCommitId: "2222222", memo: args?.request?.memo ?? "", authorTime: "2026-08-13T00:10:00Z" }, ...state.history];
@@ -194,6 +235,7 @@ test("home-project-management", async ({ page }, testInfo) => {
   test.skip(Boolean(selectedCase && selectedCase !== "home-project-management"), `Only ${selectedCase} was requested`);
   await prepare(page);
   await expect(page.getByRole("button", { name: "Projectを追加" })).toBeVisible();
+  await expect(page.locator("header")).toBeVisible();
   await expect(page.getByRole("button", { name: "お知らせを最小化" })).toBeVisible();
   await expect(page.getByText("管理しているProject")).toBeVisible();
   await expect(page.getByRole("img", { name: "アバター" })).toBeVisible();
@@ -215,25 +257,184 @@ test("repository-work-history", async ({ page }, testInfo) => {
   test.skip(Boolean(selectedCase && selectedCase !== "repository-work-history"), `Only ${selectedCase} was requested`);
   await prepare(page);
   await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
-  await expect(page.getByRole("heading", { name: "リポジトリ設定" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "このProjectの設定" })).toBeVisible();
   await page.getByRole("button", { name: "現在の作業" }).click();
-  await expect(page.getByRole("heading", { name: "現在の作業" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "現在の変更" })).toBeVisible();
+  await expect(page.locator("header")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "選択中のProject" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "projectの情報を展開する" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "保存状態の情報を展開する" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "診断の情報を展開する" })).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toBeVisible();
+  await expect(page.getByText("名前", { exact: true })).toBeVisible();
+  await expect(page.getByText("テキスト", { exact: true })).toBeVisible();
+  await expect(page.getByText("作業中", { exact: true })).toBeVisible();
+  await expect(page.getByText("未保存の変更あり", { exact: true })).toHaveCount(2);
+  await expect(page.locator("span").filter({ hasText: "未保存の変更あり" }).first()).toHaveClass(/bg-rose-100/);
+  await expect(page.getByRole("button", { name: "Assetsを折りたたむ" })).toBeVisible();
+  const detailColumnHandle = page.getByRole("button", { name: "詳細列の幅を調整" }).first();
+  await expect(detailColumnHandle).toBeVisible();
+  const detailHandleBox = await detailColumnHandle.boundingBox();
+  expect(detailHandleBox).not.toBeNull();
+  const gridBeforeResize = await page.locator('[data-file-tree-header="true"]').getAttribute("style");
+  if (detailHandleBox) {
+    await page.mouse.move(detailHandleBox.x + detailHandleBox.width / 2, detailHandleBox.y + detailHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(detailHandleBox.x + detailHandleBox.width / 2 + 120, detailHandleBox.y + detailHandleBox.height / 2);
+    await page.mouse.up();
+  }
+  await expect(page.locator('[data-file-tree-header="true"]')).not.toHaveAttribute("style", gridBeforeResize ?? "");
+  await page.evaluate(() => {
+    void (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "git-command-output",
+      payload: {
+        operation: "save_worktree",
+        executable: "/usr/bin/git",
+        args: ["commit", "-m", "current UI smoke"],
+        phase: "STARTED",
+        stream: null,
+        text: "",
+        status: null,
+      },
+    });
+  });
+  await expect(page.getByText("Git CLIの実行結果")).toBeVisible();
+  await expect(page.getByRole("log")).toContainText("git commit");
   const memo = page.getByRole("textbox", { name: "保存メモ（例: アバターの表情を調整）" });
   await memo.fill("temporary memo");
   await page.getByRole("button", { name: "保存メモをクリア" }).click();
   await expect(memo).toHaveValue("");
   await memo.fill("current UI smoke");
+  await expect(page.getByRole("button", { name: "作業を保存" })).toHaveClass(/bg-rose-600/);
   await page.getByRole("button", { name: "作業を保存" }).click();
   await expect(page.getByText("保存しました: 2222222")).toBeVisible();
+  await expect(page.getByText("保存済み", { exact: true })).toHaveCount(2);
   await expect(page.getByText("保存対象の変更はありません。 ")).toBeVisible();
   await page.getByRole("button", { name: "保存履歴" }).click();
-  await expect(page.getByRole("heading", { name: "保存履歴", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "保存履歴" })).toBeVisible();
+  await expect(page.getByText("保存メモ", { exact: true })).toBeVisible();
+  await expect(page.getByText("保存日時", { exact: true })).toBeVisible();
+  await expect(page.getByText("commit", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /current UI smoke/ }).click();
   await expect(page.getByRole("heading", { name: "保存の詳細" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Assetsを折りたたむ" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "詳細列の幅を調整" })).toBeVisible();
+  await expect(page.getByText("保存済み", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("詳細", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Assets\/avatar.txt/ }).click();
   await expect(page.getByText("+updated avatar")).toBeVisible();
   await saveScreenshot(page, testInfo, "repository-work-history");
+});
+
+test("repository-work-expands-summary-on-abnormal-state", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-work-expands-summary-on-abnormal-state"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { project: { status: string; issues: unknown[] } } }).__mockState;
+    if (state) {
+      state.project.status = "NEEDS_ATTENTION";
+      state.project.issues = [{ code: "TEST_WARNING", severity: "WARNING", message: "確認が必要な状態です。", path: null }];
+    }
+  });
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "現在の作業" }).click();
+  await expect(page.getByRole("button", { name: "projectの情報を折りたたむ" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "診断の情報を折りたたむ" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "保存状態の情報を展開する" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("1 件の確認項目", { exact: true })).toBeVisible();
+});
+
+test("repository-work-shows-save-progress", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-work-shows-save-progress"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "現在の作業" }).click();
+  await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toBeVisible();
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { saveDelayMs?: number } }).__mockState;
+    if (state) state.saveDelayMs = 500;
+  });
+  await page.getByRole("textbox", { name: "保存メモ（例: アバターの表情を調整）" }).fill("save progress");
+  await page.getByRole("button", { name: "作業を保存" }).click();
+  await expect(page.getByRole("heading", { name: "Gitで保存中" })).toBeVisible();
+  await expect(page.getByRole("log")).toContainText("Git CLIを起動しています");
+  await page.evaluate(() => {
+    void (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "git-command-output",
+      payload: {
+        operation: "save_worktree",
+        executable: "/usr/bin/git",
+        args: ["commit", "-m", "save progress"],
+        phase: "OUTPUT",
+        stream: "STDOUT",
+        text: "created commit\n",
+        status: null,
+      },
+    });
+  });
+  await expect(page.getByRole("log")).toContainText("created commit");
+  await expect(page.getByText("保存しました: 2222222")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Git CLIの実行結果" })).toBeVisible();
+});
+
+test("repository-work-refreshes-changes", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-work-refreshes-changes"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "現在の作業" }).click();
+  await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toBeVisible();
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { worktree: any } }).__mockState;
+    if (state) state.worktree = {
+      statusToken: "refreshed-token",
+      files: [{ path: "ProjectSettings/EditorSettings.asset", oldPath: null, changeKind: "ADDED", staged: false, unstaged: true, binary: false, outsideProject: false }],
+      hasConflicts: false,
+      hasExistingStagedChanges: false,
+    };
+  });
+  await page.getByRole("button", { name: "現在の変更を再読込" }).click();
+  await expect(page.getByRole("button", { name: "ProjectSettingsを折りたたむ" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "ProjectSettings/EditorSettings.asset 追加" })).toBeVisible();
+  await expect(page.getByText("未保存の変更あり", { exact: true })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toHaveCount(0);
+});
+
+test("repository-work-toggles-file-view", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-work-toggles-file-view"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "現在の作業" }).click();
+  await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Assets/avatar-material.mat 変更なし" })).toHaveCount(0);
+  const allFiles = page.getByRole("button", { name: "フォルダ内全体を表示" });
+  await allFiles.click();
+  await expect(allFiles).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Assets/avatar-material.mat 変更なし" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Packages/manifest.json 変更なし" })).toBeVisible();
+  const changedOnly = page.getByRole("button", { name: "変更のみを表示" });
+  await changedOnly.click();
+  await expect(changedOnly).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Assets/avatar-material.mat 変更なし" })).toHaveCount(0);
+});
+
+test("repository-work-warns-before-saving-stale-state", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-work-warns-before-saving-stale-state"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "現在の作業" }).click();
+  await expect(page.getByRole("button", { name: "Assets/avatar.txt 変更" })).toBeVisible();
+  const memo = page.getByRole("textbox", { name: "保存メモ（例: アバターの表情を調整）" });
+  await memo.fill("stale state check");
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { worktree: { statusToken: string } } }).__mockState;
+    if (state) state.worktree.statusToken = "changed-before-save";
+  });
+  await page.getByRole("button", { name: "作業を保存" }).click();
+  await expect(page.getByRole("alert")).toContainText("保存前に変更内容が変わったため、保存を停止しました");
+  await expect(page.getByText("保存前の変更を確認してください")).toBeVisible();
+  await expect(page.getByText("保存しました:")).toHaveCount(0);
+  const calls = await page.evaluate(() => (window as unknown as { __mockCalls?: string[] }).__mockCalls ?? []);
+  expect(calls).not.toContain("save_worktree");
 });
 
 test("repository-settings", async ({ page }, testInfo) => {

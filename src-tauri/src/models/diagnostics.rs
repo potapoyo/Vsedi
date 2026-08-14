@@ -184,6 +184,26 @@ pub struct WorktreeSnapshot {
     pub has_existing_staged_changes: bool,
 }
 
+/// Git管理対象のファイルツリー。変更がないファイルは`change_kind`がNoneになる。
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryTreeFile {
+    pub path: String,
+    pub old_path: Option<String>,
+    pub change_kind: Option<ChangeKind>,
+    pub staged: bool,
+    pub unstaged: bool,
+    pub binary: bool,
+    pub outside_project: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryTreeSnapshot {
+    pub status_token: String,
+    pub files: Vec<RepositoryTreeFile>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct IgnoreFilePreview {
@@ -232,6 +252,33 @@ pub struct SaveRequest {
     pub project_path: String,
     pub status_token: String,
     pub memo: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum GitCommandPhase {
+    Started,
+    Output,
+    Completed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum GitOutputStream {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommandEvent {
+    pub operation: String,
+    pub executable: String,
+    pub args: Vec<String>,
+    pub phase: GitCommandPhase,
+    pub stream: Option<GitOutputStream>,
+    pub text: String,
+    pub status: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]

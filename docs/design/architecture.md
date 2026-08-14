@@ -59,6 +59,13 @@ Domain / Adapters
 フロントエンドが行ってよいこと:
 
 - プロジェクト一覧、診断結果、変更、履歴、プレビューを表示する
+- worktree statusを手動で再取得し、変更ファイルを階層表示する
+- 変更一覧とrepositoryのファイルツリーを切り替えて表示する。全体表示はGit管理対象と無視されていない未管理ファイルをRust側から取得する
+- 保存履歴を細い列表示にし、選択したcommitのファイルを現在の変更と同じ階層ツリーで表示する
+- 変更・保存詳細のツリー列はマウス操作で幅を調整し、必要に応じて横スクロールできる
+- 現在の作業のサマリーは既定で折りたたみ、project診断や保存停止などの異常状態を検知したカードだけ自動展開する
+- repository画面では共通ページヘッダーを省略して作業領域を上端へ配置し、サイドバーの選択中Projectと関連メニューを枠でまとめる
+- 保存状態を未保存・保存済み・保存停止中に分類し、未保存や停止中は注意を引く色で表示する
 - ユーザーの操作意図と確認を受け取る
 - あらかじめ定義されたアプリケーション操作を要求する
 - Rust から返された構造化済みの進捗・エラーを表示する
@@ -165,6 +172,7 @@ Vsedi Core 完成後に追加する。fetch / push / fast-forward 同期と履�
 - working directory を明示する
 - 機械可読形式が利用できる場合、人間向けで locale に依存する出力を避ける
 - exit code、stdout、stderr を分離して取得する
+- 保存処理では stdout / stderr を逐次読み取り、構造化した Tauri event としてUIへ転送する
 - parser は fixture を用いたテストを行う
 - secret をログへコピーしない
 
@@ -214,7 +222,7 @@ PC 初期化・買い替え後の再構成に利用できる、バージョン�
 
 リポジトリの正しい状態は Git / project files に置き、アプリケーション側の状態を authoritative な情報として二重管理しない。
 
-`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4の単一カテゴリはschema 6で複数タグへ移行し、repositoryごとのVPM追跡方針overrideもschema 6で保持する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
+`settings.json` は整数の `schemaVersion` を必須とし、OS 標準の app data directory に Tauri Store で保存する。読込前に JSON と schema を検証し、破損 JSON や migration 対象は元ファイルを `.bak.<timestamp>` として退避する。未対応の新しい schema はエラーを返し、元ファイルを変更しない。管理対象の project path は存在しなくても設定から削除せず、`SettingsLoadResult.recentProjects[].exists` で再指定が必要な状態を表現する。schema 4の単一カテゴリはschema 6で複数タグへ移行し、repositoryごとのVPM追跡方針overrideもschema 6で保持する。schema 7では既存のignore templateを保持したままmacOS / WindowsのOS生成ファイルruleを不足分だけ追加する。repository設定はapp data側だけへ保存し、repository内へ設定fileを書き込まない。
 
 ## Rust / TypeScript 型境界
 

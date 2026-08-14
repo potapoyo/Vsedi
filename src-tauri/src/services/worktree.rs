@@ -1,10 +1,14 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
     git::{command::run_git, diagnostics, status::parse_porcelain_v2},
-    models::{RepositoryBlockingReason, RepositoryState, WorktreeSnapshot},
+    models::{
+        ChangedFile, RepositoryBlockingReason, RepositoryState, RepositoryTreeFile,
+        RepositoryTreeSnapshot, WorktreeSnapshot,
+    },
     platform::process::find_executable,
 };
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
@@ -101,6 +105,95 @@ pub fn read_worktree_snapshot(project_path: &str) -> AppResult<WorktreeSnapshot>
     Ok(snapshot)
 }
 
+pub fn read_repository_tree(project_path: &str) -> AppResult<RepositoryTreeSnapshot> {
+    debug!(operation = "read_repository_tree", project_path = %project_path, "repository file tree read started");
+    let project = canonical_project(project_path)?;
+    let Some(git) = find_executable("git") else {
+        return Err(AppError::simple(
+            ErrorCode::RepositoryInvalid,
+            "System Git が見つかりません。",
+            "read_repository_tree",
+        ));
+    };
+    let root = diagnostics::repository_root(&git, &project)
+        .flatten()
+        .ok_or_else(|| {
+            AppError::simple(
+                ErrorCode::RepositoryInvalid,
+                "この project はまだ Git 管理されていません。",
+                "read_repository_tree",
+            )
+        })?;
+    let root_path = PathBuf::from(&root);
+    let snapshot = read_worktree_snapshot_at(&git, &root_path, &project)?;
+    let output = run_git(
+        &git,
+        &[
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
+        Some(&root_path),
+    )
+    .map_err(|error| {
+        AppError::with_detail(
+            ErrorCode::WorktreeReadFailed,
+            "repositoryのファイル一覧を読み取れませんでした。",
+            "read_repository_tree",
+            error.to_string(),
+            false,
+        )
+    })?;
+    if output.status != Some(0) {
+        return Err(AppError::simple(
+            ErrorCode::WorktreeReadFailed,
+            "repositoryのファイル一覧を読み取れませんでした。",
+            "read_repository_tree",
+        ));
+    }
+
+    let project_prefix = project_prefix(&root_path, &project);
+    let changed_paths = snapshot
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<HashSet<_>>();
+    let mut files = snapshot
+        .files
+        .iter()
+        .map(repository_tree_file_from_changed)
+        .collect::<Vec<_>>();
+    for path in output.stdout.split('\0').filter(|path| !path.is_empty()) {
+        if changed_paths.contains(path) {
+            continue;
+        }
+        files.push(RepositoryTreeFile {
+            path: path.to_owned(),
+            old_path: None,
+            change_kind: None,
+            staged: false,
+            unstaged: false,
+            binary: false,
+            outside_project: project_prefix
+                .as_deref()
+                .is_some_and(|prefix| !path.starts_with(prefix)),
+        });
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    let result = RepositoryTreeSnapshot {
+        status_token: snapshot.status_token,
+        files,
+    };
+    info!(
+        operation = "read_repository_tree",
+        file_count = result.files.len(),
+        "repository file tree read completed"
+    );
+    Ok(result)
+}
+
 fn read_worktree_snapshot_at(
     git: &Path,
     root: &Path,
@@ -127,17 +220,7 @@ fn read_worktree_snapshot_at(
             "read_worktree_snapshot",
         ));
     }
-    let project_prefix = project
-        .strip_prefix(root)
-        .ok()
-        .and_then(|path| path.to_str())
-        .map(|path| {
-            if path.is_empty() {
-                String::new()
-            } else {
-                format!("{}/", path.trim_end_matches('/'))
-            }
-        });
+    let project_prefix = project_prefix(root, project);
     let mut snapshot =
         parse_porcelain_v2(&output.stdout, project_prefix.as_deref()).map_err(|detail| {
             AppError::with_detail(
@@ -150,6 +233,32 @@ fn read_worktree_snapshot_at(
         })?;
     snapshot.status_token = content_aware_status_token(&output.stdout, root, &snapshot.files);
     Ok(snapshot)
+}
+
+fn project_prefix(root: &Path, project: &Path) -> Option<String> {
+    project
+        .strip_prefix(root)
+        .ok()
+        .and_then(|path| path.to_str())
+        .map(|path| {
+            if path.is_empty() {
+                String::new()
+            } else {
+                format!("{}/", path.trim_end_matches('/'))
+            }
+        })
+}
+
+fn repository_tree_file_from_changed(file: &ChangedFile) -> RepositoryTreeFile {
+    RepositoryTreeFile {
+        path: file.path.clone(),
+        old_path: file.old_path.clone(),
+        change_kind: Some(file.change_kind.clone()),
+        staged: file.staged,
+        unstaged: file.unstaged,
+        binary: file.binary,
+        outside_project: file.outside_project,
+    }
 }
 
 fn canonical_project(path: &str) -> AppResult<PathBuf> {

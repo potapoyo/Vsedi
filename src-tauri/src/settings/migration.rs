@@ -1,6 +1,6 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
-    models::settings::{IgnoreTemplateSettings, CURRENT_SCHEMA_VERSION},
+    models::settings::{IgnoreTemplateSettings, CURRENT_SCHEMA_VERSION, DEFAULT_OS_IGNORE_RULES},
 };
 use serde_json::Value;
 
@@ -65,6 +65,9 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
                 }
             }
         }
+        if schema_version < 7 {
+            add_missing_os_ignore_rules(object);
+        }
         if schema_version < CURRENT_SCHEMA_VERSION {
             object.insert(
                 "schemaVersion".to_owned(),
@@ -73,6 +76,30 @@ pub fn migrate(mut value: Value, schema_version: u32) -> AppResult<Value> {
         }
     }
     Ok(value)
+}
+
+fn add_missing_os_ignore_rules(object: &mut serde_json::Map<String, Value>) {
+    let templates = object.entry("ignoreTemplates").or_insert_with(|| {
+        serde_json::to_value(IgnoreTemplateSettings::default())
+            .expect("default ignore templates serialize")
+    });
+    let Some(templates) = templates.as_object_mut() else {
+        *templates = serde_json::to_value(IgnoreTemplateSettings::default())
+            .expect("default ignore templates serialize");
+        return;
+    };
+    let rules = templates
+        .entry("unityRules")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(rules) = rules.as_array_mut() else {
+        *rules = Value::Array(Vec::new());
+        return;
+    };
+    for rule in DEFAULT_OS_IGNORE_RULES {
+        if !rules.iter().any(|existing| existing.as_str() == Some(rule)) {
+            rules.push(Value::String((*rule).to_owned()));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -91,12 +118,18 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["schemaVersion"], 7);
         assert_eq!(migrated["vpmTrackingPolicy"], "EXCLUDE_PACKAGES");
         assert_eq!(
             migrated["ignoreTemplates"]["unityRules"][0],
             "/[Ll]ibrary/*"
         );
+        assert!(migrated["ignoreTemplates"]["unityRules"]
+            .as_array()
+            .is_some_and(|rules| rules.iter().any(|rule| rule == ".DS_Store")));
+        assert!(!migrated["ignoreTemplates"]["unityRules"]
+            .as_array()
+            .is_some_and(|rules| rules.iter().any(|rule| rule == "Icon")));
         assert_eq!(migrated["recentProjects"][0]["path"], "/project");
         assert_eq!(migrated["recentProjects"][0]["tags"], serde_json::json!([]));
         assert!(migrated["repositorySettings"]
@@ -117,7 +150,7 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["schemaVersion"], 7);
         assert_eq!(migrated["recentProjects"][0]["tags"], serde_json::json!([]));
         assert!(migrated["repositorySettings"]
             .as_array()
@@ -137,7 +170,7 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["schemaVersion"], 7);
         assert!(migrated["repositorySettings"]
             .as_array()
             .is_some_and(Vec::is_empty));
@@ -155,8 +188,36 @@ mod tests {
         )
         .expect("migration");
 
-        assert_eq!(migrated["schemaVersion"], 6);
+        assert_eq!(migrated["schemaVersion"], 7);
         assert_eq!(migrated["recentProjects"][0]["tags"], json!([" Avatar "]));
         assert!(migrated["recentProjects"][0].get("category").is_none());
+    }
+
+    #[test]
+    fn schema_six_adds_os_ignore_rules_without_removing_custom_rules() {
+        let migrated = migrate(
+            json!({
+                "schemaVersion": 6,
+                "recentProjects": [],
+                "ignoreTemplates": {
+                    "unityRules": ["custom-cache/", ".DS_Store"],
+                    "vpmExcludeRules": []
+                },
+                "repositorySettings": []
+            }),
+            6,
+        )
+        .expect("migration");
+
+        assert_eq!(migrated["schemaVersion"], 7);
+        assert_eq!(
+            migrated["ignoreTemplates"]["unityRules"][0],
+            "custom-cache/"
+        );
+        let rules = migrated["ignoreTemplates"]["unityRules"]
+            .as_array()
+            .expect("unity rules");
+        assert_eq!(rules.iter().filter(|rule| *rule == ".DS_Store").count(), 1);
+        assert!(rules.iter().any(|rule| rule == "Thumbs.db"));
     }
 }
