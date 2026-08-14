@@ -4,7 +4,7 @@ import type {
   AppSettings,
   EnvironmentDiagnostic,
   InitializeRepositoryRequest,
-  HistoryEntry,
+  HistoryPage,
   CommitDetail,
   FileDiff,
   LogSnapshot,
@@ -60,8 +60,8 @@ export function saveWorktree(request: SaveRequest) {
   return invoke<SaveResult>("save_worktree", { request });
 }
 
-export function readHistory(projectPath: string) {
-  return invoke<HistoryEntry[]>("read_history", { projectPath });
+export function readHistory(projectPath: string, offset = 0) {
+  return invoke<HistoryPage>("read_history", { projectPath, offset });
 }
 
 export function readCommitDetail(projectPath: string, commitId: string) {

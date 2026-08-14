@@ -82,6 +82,7 @@ Windows native UI CIは旧external driver方式を廃止し、アプリ内のdeb
 - Project画面の共通ヘッダー省略と、サイドバーの選択中Project枠表示
 - 保存メモ、`add`、`commit`、保存直前の再検証、保存中のGit CLI進捗表示
 - Finder風の細いcommit履歴一覧、列幅を調整できるcommit詳細の変更ファイルツリー、表示可能なdiff
+- 保存履歴など長い画面のメイン領域スクロールと固定サイドバー
 - 管理Project一覧、最終更新順、複数タグ設定・タグ絞り込み・Project検索
 - ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定の分離
 - 全体のVPM既定値とrepository固有override
