@@ -113,8 +113,10 @@ component NavButton inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Vsedi";
-    width: 1280px;
-    height: 860px;
+    preferred-width: 1280px;
+    preferred-height: 860px;
+    min-width: 960px;
+    min-height: 640px;
 
     in-out property <string> environment-status: "確認中…";
     in-out property <string> project-status: "Unity projectを選択してください。";
@@ -216,8 +218,13 @@ export component MainWindow inherits Window {
 
             ScrollView {
                 horizontal-stretch: 1;
+                vertical-stretch: 1;
+                vertical-scrollbar-policy: ScrollBarPolicy.always-on;
+                horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
+                mouse-drag-pan-enabled: true;
                 if root.current-page == "HOME": VerticalLayout {
                     width: 100%;
+                    min-width: 760px;
                     padding-right: 10px;
                     padding-bottom: 12px;
                     spacing: 18px;
@@ -254,7 +261,7 @@ export component MainWindow inherits Window {
                     }
 
                     Rectangle {
-                        height: 176px;
+                        min-height: 188px;
                         border-radius: 22px;
                         background: #111827;
                         HorizontalLayout {
@@ -376,7 +383,7 @@ export component MainWindow inherits Window {
                         spacing: 12px;
                         Rectangle {
                             horizontal-stretch: 1;
-                            height: 254px;
+                            min-height: 300px;
                             border-radius: 18px;
                             border-width: 1px;
                             border-color: AppTheme.card-border;
@@ -451,7 +458,7 @@ export component MainWindow inherits Window {
                         }
                         Rectangle {
                             horizontal-stretch: 1;
-                            height: 254px;
+                            min-height: 300px;
                             border-radius: 18px;
                             border-width: 1px;
                             border-color: AppTheme.card-border;
@@ -540,6 +547,7 @@ export component MainWindow inherits Window {
 
                 if root.current-page == "HISTORY": VerticalLayout {
                     width: 100%;
+                    min-width: 760px;
                     padding-right: 10px;
                     padding-bottom: 12px;
                     spacing: 20px;
@@ -640,6 +648,7 @@ export component MainWindow inherits Window {
 
                 if root.current-page == "SETTINGS": VerticalLayout {
                     width: 100%;
+                    min-width: 760px;
                     padding-right: 10px;
                     padding-bottom: 12px;
                     spacing: 20px;
