@@ -17,6 +17,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window.set_environment_status(SharedString::from(environment_text()));
 
     let weak_window = window.as_weak();
+    window.on_navigate(move |page| {
+        if let Some(window) = weak_window.upgrade() {
+            window.set_current_page(page);
+        }
+    });
+
+    let weak_window = window.as_weak();
     window.on_refresh_application(move || {
         if let Some(window) = weak_window.upgrade() {
             window.set_environment_status(SharedString::from(environment_text()));
@@ -243,6 +250,16 @@ mod tests {
         )
         .collect::<Vec<_>>();
         assert_eq!(pickers.len(), 1);
+
+        for label in ["ホーム", "保存履歴", "設定"] {
+            let navigation =
+                i_slint_backend_testing::ElementHandle::find_by_accessible_label(&app, label)
+                    .collect::<Vec<_>>();
+            assert!(
+                !navigation.is_empty(),
+                "navigation item should be present: {label}"
+            );
+        }
     }
 
     #[test]
@@ -266,5 +283,24 @@ mod tests {
         assert_eq!(summary, "変更 1件");
         assert_eq!(token, "token");
         assert_eq!(files, "変更  Assets/Scene.unity");
+    }
+
+    #[test]
+    fn navigation_actions_select_the_history_page() {
+        i_slint_backend_testing::init_no_event_loop();
+        let app = MainWindow::new().expect("Slint window should be constructible");
+        let weak_app = app.as_weak();
+        app.on_navigate(move |page| {
+            if let Some(app) = weak_app.upgrade() {
+                app.set_current_page(page);
+            }
+        });
+
+        let history =
+            i_slint_backend_testing::ElementHandle::find_by_accessible_label(&app, "保存履歴")
+                .next()
+                .expect("history navigation should be present");
+        history.invoke_accessible_default_action();
+        assert_eq!(app.get_current_page(), "HISTORY");
     }
 }
