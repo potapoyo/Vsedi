@@ -1,86 +1,54 @@
 import { Button, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 export global AppTheme {
-    out property <color> page-background: #f8fafc;
-    out property <color> text-primary: #172033;
+    out property <color> page-background: #f4f6f9;
+    out property <color> sidebar-background: #ffffff;
+    out property <color> surface: #ffffff;
+    out property <color> surface-soft: #f8fafc;
+    out property <color> surface-muted: #f1f5f9;
+    out property <color> border: #e2e8f0;
+    out property <color> text-primary: #0f172a;
     out property <color> text-secondary: #475569;
     out property <color> text-muted: #64748b;
-    out property <color> card-background: #ffffff;
-    out property <color> card-border: #e2e8f0;
     out property <color> accent: #2563eb;
-    out property <color> accent-soft: #dbeafe;
+    out property <color> accent-soft: #eff6ff;
+    out property <color> accent-border: #bfdbfe;
     out property <color> success: #047857;
-    out property <color> success-soft: #d1fae5;
+    out property <color> success-soft: #ecfdf5;
     out property <color> warning: #b45309;
-    out property <color> warning-soft: #fef3c7;
+    out property <color> warning-soft: #fffbeb;
+    out property <color> hero: #0f172a;
+    out property <color> hero-muted: #cbd5e1;
 }
 
 component StatusPill inherits Rectangle {
     in property <string> pill-text;
-    in property <color> pill-background: AppTheme.accent-soft;
-    in property <color> pill-foreground: #1d4ed8;
+    in property <color> pill-background: AppTheme.surface-muted;
+    in property <color> pill-foreground: AppTheme.text-secondary;
+    width: 112px;
     height: 30px;
-    width: 100px;
     border-radius: 15px;
     background: pill-background;
 
-    Text {
+    Rectangle {
         x: 12px;
+        y: 11px;
+        width: 7px;
+        height: 7px;
+        border-radius: 4px;
+        background: root.pill-foreground;
+    }
+    Text {
+        x: 26px;
         y: 0px;
+        width: parent.width - 32px;
         height: parent.height;
         text: root.pill-text;
         color: root.pill-foreground;
         font-size: 13px;
         font-weight: 700;
         vertical-alignment: center;
-    }
-}
-
-component MetricCard inherits Rectangle {
-    in property <string> eyebrow;
-    in property <string> value;
-    in property <string> detail;
-    in property <color> marker: AppTheme.accent;
-    height: 132px;
-    border-radius: 16px;
-    border-width: 1px;
-    border-color: AppTheme.card-border;
-    background: AppTheme.card-background;
-
-    Rectangle {
-        x: 0px;
-        y: 20px;
-        width: 4px;
-        height: 56px;
-        border-radius: 2px;
-        background: root.marker;
-    }
-    VerticalLayout {
-        padding-left: 18px;
-        padding-right: 16px;
-        padding-top: 14px;
-        padding-bottom: 12px;
-        spacing: 4px;
-        Text {
-            text: root.eyebrow;
-            color: AppTheme.text-muted;
-            font-size: 12px;
-            font-weight: 700;
-        }
-        Text {
-            text: root.value;
-            color: AppTheme.text-primary;
-            font-size: 20px;
-            font-weight: 700;
-            overflow: elide;
-        }
-        Text {
-            text: root.detail;
-            color: AppTheme.text-secondary;
-            font-size: 14px;
-            wrap: word-wrap;
-            overflow: elide;
-        }
+        overflow: elide;
     }
 }
 
@@ -88,26 +56,108 @@ component NavButton inherits Rectangle {
     in property <string> label;
     in property <bool> active;
     callback clicked;
-    height: 48px;
-    border-radius: 12px;
-    background: root.active ? #0f172a : transparent;
+    height: 46px;
+    border-radius: 11px;
+    background: root.active ? AppTheme.accent-soft : transparent;
     accessible-role: button;
     accessible-label: root.label;
     accessible-action-default => { root.clicked(); }
 
+    Rectangle {
+        x: 0px;
+        y: 9px;
+        width: 3px;
+        height: parent.height - 18px;
+        border-radius: 2px;
+        background: root.active ? AppTheme.accent : transparent;
+    }
     Text {
-        x: 16px;
+        x: 18px;
         y: 0px;
-        width: parent.width - 32px;
+        width: parent.width - 30px;
         height: parent.height;
         text: root.label;
-        color: root.active ? white : #475569;
-        font-size: 16px;
+        color: root.active ? AppTheme.accent : AppTheme.text-secondary;
+        font-size: 15px;
         font-weight: root.active ? 700 : 600;
         vertical-alignment: center;
     }
     TouchArea {
         clicked => { root.clicked(); }
+    }
+}
+
+component Eyebrow inherits Text {
+    color: AppTheme.text-muted;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+}
+
+component PageTitle inherits Text {
+    color: AppTheme.text-primary;
+    font-size: 30px;
+    font-weight: 700;
+}
+
+component PanelTitle inherits Text {
+    color: AppTheme.text-primary;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+component Panel inherits Rectangle {
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    background: AppTheme.surface;
+}
+
+component SummaryCard inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> detail;
+    in property <color> marker: AppTheme.accent;
+    height: 116px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    background: AppTheme.surface;
+
+    Rectangle {
+        x: 0px;
+        y: 24px;
+        width: 4px;
+        height: 52px;
+        border-radius: 2px;
+        background: root.marker;
+    }
+    VerticalLayout {
+        padding-left: 18px;
+        padding-right: 16px;
+        padding-top: 15px;
+        padding-bottom: 12px;
+        spacing: 4px;
+        Text {
+            text: root.label;
+            color: AppTheme.text-muted;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.value;
+            color: AppTheme.text-primary;
+            font-size: 21px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        Text {
+            text: root.detail;
+            color: AppTheme.text-secondary;
+            font-size: 13px;
+            wrap: word-wrap;
+            overflow: elide;
+        }
     }
 }
 
@@ -145,45 +195,43 @@ export component MainWindow inherits Window {
         background: AppTheme.page-background;
 
         HorizontalLayout {
-            padding: 24px;
-            spacing: 24px;
+            padding: 20px;
+            spacing: 20px;
 
             Rectangle {
-                width: 256px;
+                width: 244px;
+                border-radius: 18px;
                 border-width: 1px;
-                border-color: #e2e8f0;
-                background: #ffffff;
+                border-color: AppTheme.border;
+                background: AppTheme.sidebar-background;
 
                 VerticalLayout {
-                    padding: 20px;
-                    spacing: 12px;
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    padding-top: 22px;
+                    padding-bottom: 18px;
+                    spacing: 10px;
 
                     Text {
                         text: "LOCAL FIRST";
-                        color: #2563eb;
+                        color: AppTheme.accent;
                         font-size: 11px;
                         font-weight: 700;
                         letter-spacing: 2px;
                     }
                     Text {
                         text: "Vsedi";
-                        color: #0f172a;
+                        color: AppTheme.text-primary;
                         font-size: 30px;
                         font-weight: 700;
-                        accessible-label: "Vsedi";
                     }
                     Text {
                         text: "安全なローカル保存";
-                        color: #64748b;
+                        color: AppTheme.text-muted;
                         font-size: 13px;
                     }
-                    Text {
-                        text: "Slint 移植試作";
-                        color: #2563eb;
-                        font-size: 13px;
-                    }
-
-                    Rectangle { height: 1px; background: #e2e8f0; }
+                    Rectangle { height: 1px; background: AppTheme.border; }
+                    Rectangle { height: 8px; }
 
                     NavButton {
                         label: "ホーム";
@@ -204,14 +252,22 @@ export component MainWindow inherits Window {
                         accessible-id: "nav-settings";
                     }
 
-                    Rectangle { height: 1px; background: #e2e8f0; }
                     Rectangle { vertical-stretch: 1; }
-                    Text {
-                        text: "LOCAL ONLY";
-                        color: #94a3b8;
-                        font-size: 11px;
-                        font-weight: 700;
-                        letter-spacing: 1px;
+                    Rectangle { height: 1px; background: AppTheme.border; }
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text {
+                            text: "SLINT NATIVE UI";
+                            color: AppTheme.text-muted;
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 1px;
+                        }
+                        Text {
+                            text: "Rust service boundary";
+                            color: AppTheme.text-secondary;
+                            font-size: 12px;
+                        }
                     }
                 }
             }
@@ -222,40 +278,48 @@ export component MainWindow inherits Window {
                 vertical-scrollbar-policy: ScrollBarPolicy.always-on;
                 horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
                 mouse-drag-pan-enabled: true;
+
                 if root.current-page == "HOME": VerticalLayout {
                     width: 100%;
                     min-width: 760px;
-                    padding-right: 10px;
-                    padding-bottom: 12px;
-                    spacing: 18px;
+                    padding-right: 12px;
+                    padding-bottom: 16px;
+                    spacing: 20px;
 
                     Rectangle {
-                        height: 66px;
+                        height: 68px;
                         background: transparent;
                         HorizontalLayout {
-                            spacing: 10px;
+                            spacing: 12px;
                             VerticalLayout {
-                                spacing: 2px;
-                                Text {
-                                    text: "VSEDI";
-                                    color: AppTheme.text-muted;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    letter-spacing: 2px;
-                                }
-                                Text {
-                                    text: "ホーム";
-                                    color: AppTheme.text-primary;
-                                    font-size: 30px;
-                                    font-weight: 700;
-                                }
+                                spacing: 3px;
+                                Eyebrow { text: "VSEDI"; }
+                                PageTitle { text: "ホーム"; }
                             }
                             Rectangle { horizontal-stretch: 1; }
-                            Button {
-                                text: "再読込";
-                                primary: false;
-                                accessible-id: "refresh-home";
-                                clicked => { root.refresh-application(); }
+                            VerticalLayout {
+                                spacing: 6px;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: root.environment-status;
+                                        color: AppTheme.text-muted;
+                                        font-size: 12px;
+                                        horizontal-alignment: right;
+                                        overflow: elide;
+                                    }
+                                    StatusPill {
+                                        pill-text: "ローカル";
+                                        pill-background: AppTheme.success-soft;
+                                        pill-foreground: AppTheme.success;
+                                    }
+                                }
+                                Button {
+                                    text: "再読込";
+                                    primary: false;
+                                    accessible-id: "refresh-home";
+                                    clicked => { root.refresh-application(); }
+                                }
                             }
                         }
                     }
@@ -263,18 +327,19 @@ export component MainWindow inherits Window {
                     Rectangle {
                         min-height: 188px;
                         border-radius: 22px;
-                        background: #111827;
+                        background: AppTheme.hero;
                         HorizontalLayout {
-                            padding: 24px;
-                            spacing: 18px;
+                            padding: 26px;
+                            spacing: 20px;
                             VerticalLayout {
-                                spacing: 8px;
+                                vertical-stretch: 1;
+                                spacing: 9px;
                                 Text {
                                     text: "制作のセーブポイント";
                                     color: #93c5fd;
                                     font-size: 11px;
                                     font-weight: 700;
-                                    letter-spacing: 1px;
+                                    letter-spacing: 1.2px;
                                 }
                                 Text {
                                     text: "管理する project を選択";
@@ -283,10 +348,16 @@ export component MainWindow inherits Window {
                                     font-weight: 700;
                                 }
                                 Text {
-                                    text: "project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。";
-                                    color: #cbd5e1;
+                                    text: "Unity / VRChat / Git の状態を確認して、安全に作業を保存します。";
+                                    color: AppTheme.hero-muted;
                                     font-size: 15px;
                                     wrap: word-wrap;
+                                }
+                                Rectangle { vertical-stretch: 1; }
+                                Text {
+                                    text: "保存前に必ず変更内容を確認します";
+                                    color: #94a3b8;
+                                    font-size: 12px;
                                 }
                             }
                             Rectangle { horizontal-stretch: 1; }
@@ -301,48 +372,51 @@ export component MainWindow inherits Window {
 
                     HorizontalLayout {
                         spacing: 12px;
-                        MetricCard {
+                        SummaryCard {
                             horizontal-stretch: 1;
-                            eyebrow: "実行環境";
+                            label: "実行環境";
                             value: "確認済み";
                             detail: root.environment-status;
                             marker: AppTheme.success;
                         }
-                        MetricCard {
+                        SummaryCard {
                             horizontal-stretch: 1;
-                            eyebrow: "Project 診断";
+                            label: "Project 診断";
                             value: root.project-path == "" ? "未選択" : "選択済み";
                             detail: root.project-status;
                             marker: AppTheme.accent;
                         }
+                        SummaryCard {
+                            horizontal-stretch: 1;
+                            label: "保存履歴";
+                            value: root.worktree-token == "" ? "未確認" : "確認済み";
+                            detail: "ローカル repository のみ";
+                            marker: #7c3aed;
+                        }
                     }
 
-                    Rectangle {
-                        border-radius: 18px;
-                        border-width: 1px;
-                        border-color: AppTheme.card-border;
-                        background: AppTheme.card-background;
+                    Panel {
+                        min-height: 250px;
                         VerticalLayout {
-                            padding: 18px;
-                            spacing: 12px;
+                            padding: 20px;
+                            spacing: 13px;
                             HorizontalLayout {
-                                Text {
-                                    text: "Project 診断";
-                                    color: AppTheme.text-primary;
-                                    font-size: 20px;
-                                    font-weight: 700;
+                                spacing: 12px;
+                                VerticalLayout {
+                                    spacing: 3px;
+                                    PanelTitle { text: "Project 診断"; }
+                                    Text {
+                                        text: "Unity / VRChat project の状態を確認します";
+                                        color: AppTheme.text-muted;
+                                        font-size: 13px;
+                                    }
                                 }
                                 Rectangle { horizontal-stretch: 1; }
                                 StatusPill {
                                     pill-text: root.project-path == "" ? "未選択" : "確認待ち";
                                     pill-background: root.project-path == "" ? AppTheme.warning-soft : AppTheme.accent-soft;
-                                    pill-foreground: root.project-path == "" ? AppTheme.warning : #1d4ed8;
+                                    pill-foreground: root.project-path == "" ? AppTheme.warning : AppTheme.accent;
                                 }
-                            }
-                            Text {
-                                text: "Unity / VRChat project の場所を確認します。既存のrepositoryは変更しません。";
-                                color: AppTheme.text-secondary;
-                                font-size: 14px;
                             }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -365,39 +439,37 @@ export component MainWindow inherits Window {
                                     accessible-id: "inspect-project";
                                 }
                             }
+                            Rectangle { height: 1px; background: AppTheme.border; }
                             Rectangle {
-                                height: 1px;
-                                background: AppTheme.card-border;
-                            }
-                            Text {
-                                text: root.project-status;
-                                color: AppTheme.text-secondary;
-                                font-size: 15px;
-                                wrap: word-wrap;
-                                accessible-id: "project-status";
+                                vertical-stretch: 1;
+                                border-radius: 11px;
+                                background: AppTheme.surface-soft;
+                                Text {
+                                    x: 14px;
+                                    y: 10px;
+                                    width: parent.width - 28px;
+                                    height: parent.height - 20px;
+                                    text: root.project-status;
+                                    color: AppTheme.text-secondary;
+                                    font-size: 14px;
+                                    wrap: word-wrap;
+                                    overflow: elide;
+                                    accessible-id: "project-status";
+                                }
                             }
                         }
                     }
 
                     HorizontalLayout {
                         spacing: 12px;
-                        Rectangle {
+                        Panel {
                             horizontal-stretch: 1;
-                            min-height: 300px;
-                            border-radius: 18px;
-                            border-width: 1px;
-                            border-color: AppTheme.card-border;
-                            background: AppTheme.card-background;
+                            min-height: 330px;
                             VerticalLayout {
-                                padding: 18px;
+                                padding: 20px;
                                 spacing: 10px;
                                 HorizontalLayout {
-                                    Text {
-                                        text: "現在の作業";
-                                        color: AppTheme.text-primary;
-                                        font-size: 20px;
-                                        font-weight: 700;
-                                    }
+                                    PanelTitle { text: "現在の作業"; }
                                     Rectangle { horizontal-stretch: 1; }
                                     StatusPill {
                                         pill-text: root.worktree-token == "" ? "未確認" : "確認済み";
@@ -408,7 +480,7 @@ export component MainWindow inherits Window {
                                 Text {
                                     text: "保存対象は repository 全体です。project 外の変更も表示します。";
                                     color: AppTheme.text-secondary;
-                                    font-size: 14px;
+                                    font-size: 13px;
                                     wrap: word-wrap;
                                 }
                                 Button {
@@ -417,16 +489,18 @@ export component MainWindow inherits Window {
                                     clicked => { root.refresh-worktree(root.project-path); }
                                     accessible-id: "refresh-worktree";
                                 }
+                                Rectangle { height: 1px; background: AppTheme.border; }
                                 Text {
                                     text: root.worktree-status;
                                     color: AppTheme.text-primary;
                                     font-size: 16px;
                                     font-weight: 700;
+                                    wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.worktree-files;
                                     color: AppTheme.text-secondary;
-                                    font-size: 14px;
+                                    font-size: 13px;
                                     wrap: word-wrap;
                                     overflow: elide;
                                     accessible-id: "worktree-files";
@@ -450,40 +524,31 @@ export component MainWindow inherits Window {
                                 Text {
                                     text: root.save-status;
                                     color: AppTheme.success;
-                                    font-size: 14px;
+                                    font-size: 13px;
                                     wrap: word-wrap;
                                     accessible-id: "save-status";
                                 }
                             }
                         }
-                        Rectangle {
+                        Panel {
                             horizontal-stretch: 1;
-                            min-height: 300px;
-                            border-radius: 18px;
-                            border-width: 1px;
-                            border-color: AppTheme.card-border;
-                            background: AppTheme.card-background;
+                            min-height: 330px;
                             VerticalLayout {
-                                padding: 18px;
+                                padding: 20px;
                                 spacing: 10px;
                                 HorizontalLayout {
-                                    Text {
-                                        text: "保存履歴";
-                                        color: AppTheme.text-primary;
-                                        font-size: 20px;
-                                        font-weight: 700;
-                                    }
+                                    PanelTitle { text: "保存履歴"; }
                                     Rectangle { horizontal-stretch: 1; }
                                     StatusPill {
                                         pill-text: "ローカル";
                                         pill-background: AppTheme.accent-soft;
-                                        pill-foreground: #1d4ed8;
+                                        pill-foreground: AppTheme.accent;
                                     }
                                 }
                                 Text {
-                                    text: "保存した commit を新しい順に表示します。履歴を読むだけでは現在の作業を変更しません。";
+                                    text: "保存した commit を新しい順に表示します。";
                                     color: AppTheme.text-secondary;
-                                    font-size: 14px;
+                                    font-size: 13px;
                                     wrap: word-wrap;
                                 }
                                 Button {
@@ -494,18 +559,18 @@ export component MainWindow inherits Window {
                                 }
                                 Rectangle {
                                     vertical-stretch: 1;
-                                    border-radius: 10px;
-                                    background: #f8fafc;
+                                    border-radius: 11px;
+                                    background: AppTheme.surface-soft;
                                     border-width: 1px;
-                                    border-color: #e2e8f0;
+                                    border-color: AppTheme.border;
                                     Text {
-                                        x: 12px;
-                                        y: 10px;
-                                        width: parent.width - 24px;
-                                        height: parent.height - 20px;
+                                        x: 14px;
+                                        y: 12px;
+                                        width: parent.width - 28px;
+                                        height: parent.height - 24px;
                                         text: root.history-status;
                                         color: AppTheme.text-secondary;
-                                        font-size: 14px;
+                                        font-size: 13px;
                                         wrap: word-wrap;
                                         overflow: elide;
                                         accessible-id: "history-status";
@@ -516,30 +581,27 @@ export component MainWindow inherits Window {
                     }
 
                     Rectangle {
-                        border-radius: 18px;
+                        border-radius: 16px;
                         border-width: 1px;
-                        border-color: #bfdbfe;
-                        background: #eff6ff;
+                        border-color: AppTheme.accent-border;
+                        background: AppTheme.accent-soft;
                         VerticalLayout {
-                            padding: 18px;
-                            spacing: 6px;
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            padding-top: 17px;
+                            padding-bottom: 17px;
+                            spacing: 5px;
                             Text {
-                                text: "移植の進捗";
+                                text: "安全なローカル保存";
                                 color: #1e3a8a;
-                                font-size: 18px;
+                                font-size: 16px;
                                 font-weight: 700;
                             }
                             Text {
-                                text: "M3 の Rust service を Slint UI から呼び出す画面を、既存のカード型レイアウトへ移植しています。";
+                                text: "変更内容とstatus tokenを確認してから保存します。既存のstaged変更や競合がある場合は停止します。";
                                 color: #1e40af;
-                                font-size: 14px;
+                                font-size: 13px;
                                 wrap: word-wrap;
-                            }
-                            Text {
-                                text: "✓ project 診断   ✓ 変更確認   ✓ 作業保存   ✓ 保存履歴";
-                                color: #1d4ed8;
-                                font-size: 14px;
-                                font-weight: 700;
                             }
                         }
                     }
@@ -548,45 +610,26 @@ export component MainWindow inherits Window {
                 if root.current-page == "HISTORY": VerticalLayout {
                     width: 100%;
                     min-width: 760px;
-                    padding-right: 10px;
-                    padding-bottom: 12px;
+                    padding-right: 12px;
+                    padding-bottom: 16px;
                     spacing: 20px;
 
                     Rectangle {
-                        height: 84px;
+                        height: 68px;
                         background: transparent;
                         VerticalLayout {
                             spacing: 3px;
-                            Text {
-                                text: "VSEDI";
-                                color: AppTheme.text-muted;
-                                font-size: 12px;
-                                font-weight: 700;
-                                letter-spacing: 2px;
-                            }
-                            Text {
-                                text: "保存履歴";
-                                color: AppTheme.text-primary;
-                                font-size: 32px;
-                                font-weight: 700;
-                            }
+                            Eyebrow { text: "VSEDI / LOCAL HISTORY"; }
+                            PageTitle { text: "保存履歴"; }
                         }
                     }
-                    Rectangle {
-                        border-radius: 22px;
-                        border-width: 1px;
-                        border-color: AppTheme.card-border;
-                        background: AppTheme.card-background;
+                    Panel {
+                        min-height: 440px;
                         VerticalLayout {
-                            padding: 24px;
-                            spacing: 16px;
+                            padding: 22px;
+                            spacing: 15px;
                             HorizontalLayout {
-                                Text {
-                                    text: "保存履歴";
-                                    color: AppTheme.text-primary;
-                                    font-size: 21px;
-                                    font-weight: 700;
-                                }
+                                PanelTitle { text: "保存履歴"; }
                                 Rectangle { horizontal-stretch: 1; }
                                 Button {
                                     text: "履歴を読み込む";
@@ -596,22 +639,22 @@ export component MainWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: "このProjectで保存したcommitを、新しい順に確認できます。履歴を選択しても現在の作業は変更されません。";
+                                text: "このProjectで保存したcommitを、新しい順に確認できます。履歴を読むだけでは現在の作業を変更しません。";
                                 color: AppTheme.text-secondary;
                                 font-size: 14px;
                                 wrap: word-wrap;
                             }
                             Rectangle {
-                                height: 340px;
-                                border-radius: 14px;
+                                vertical-stretch: 1;
+                                border-radius: 12px;
                                 border-width: 1px;
-                                border-color: AppTheme.card-border;
-                                background: #f8fafc;
+                                border-color: AppTheme.border;
+                                background: AppTheme.surface-soft;
                                 Text {
                                     x: 18px;
-                                    y: 18px;
+                                    y: 16px;
                                     width: parent.width - 36px;
-                                    height: parent.height - 36px;
+                                    height: parent.height - 32px;
                                     text: root.history-status;
                                     color: AppTheme.text-primary;
                                     font-size: 14px;
@@ -623,21 +666,24 @@ export component MainWindow inherits Window {
                         }
                     }
                     Rectangle {
-                        border-radius: 18px;
+                        border-radius: 16px;
                         border-width: 1px;
-                        border-color: #bfdbfe;
-                        background: #eff6ff;
+                        border-color: AppTheme.accent-border;
+                        background: AppTheme.accent-soft;
                         VerticalLayout {
-                            padding: 20px;
-                            spacing: 8px;
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            padding-top: 18px;
+                            padding-bottom: 18px;
+                            spacing: 6px;
                             Text {
                                 text: "安全な確認";
                                 color: #1e3a8a;
-                                font-size: 17px;
+                                font-size: 16px;
                                 font-weight: 700;
                             }
                             Text {
-                                text: "履歴を選択しただけでは、現在のworktreeやファイルは変更されません。安全な復元はM4で追加します。";
+                                text: "履歴を選択しただけでは、現在のworktreeやファイルは変更されません。";
                                 color: #1e40af;
                                 font-size: 14px;
                                 wrap: word-wrap;
@@ -649,44 +695,25 @@ export component MainWindow inherits Window {
                 if root.current-page == "SETTINGS": VerticalLayout {
                     width: 100%;
                     min-width: 760px;
-                    padding-right: 10px;
-                    padding-bottom: 12px;
+                    padding-right: 12px;
+                    padding-bottom: 16px;
                     spacing: 20px;
 
                     Rectangle {
-                        height: 84px;
+                        height: 68px;
                         background: transparent;
                         VerticalLayout {
                             spacing: 3px;
-                            Text {
-                                text: "VSEDI";
-                                color: AppTheme.text-muted;
-                                font-size: 12px;
-                                font-weight: 700;
-                                letter-spacing: 2px;
-                            }
-                            Text {
-                                text: "設定";
-                                color: AppTheme.text-primary;
-                                font-size: 32px;
-                                font-weight: 700;
-                            }
+                            Eyebrow { text: "VSEDI / PREFERENCES"; }
+                            PageTitle { text: "設定"; }
                         }
                     }
-                    Rectangle {
-                        border-radius: 22px;
-                        border-width: 1px;
-                        border-color: AppTheme.card-border;
-                        background: AppTheme.card-background;
+                    Panel {
+                        min-height: 150px;
                         VerticalLayout {
-                            padding: 24px;
-                            spacing: 16px;
-                            Text {
-                                text: "全体設定";
-                                color: AppTheme.text-primary;
-                                font-size: 21px;
-                                font-weight: 700;
-                            }
+                            padding: 22px;
+                            spacing: 10px;
+                            PanelTitle { text: "全体設定"; }
                             Text {
                                 text: "Vsedi全体の動作と、ローカル保存に関する既定値を確認します。設定値はrepositoryのファイルを変更しません。";
                                 color: AppTheme.text-secondary;
@@ -697,28 +724,20 @@ export component MainWindow inherits Window {
                     }
                     HorizontalLayout {
                         spacing: 14px;
-                        Rectangle {
+                        Panel {
                             horizontal-stretch: 1;
-                            height: 190px;
-                            border-radius: 18px;
-                            border-width: 1px;
-                            border-color: AppTheme.card-border;
-                            background: AppTheme.card-background;
+                            min-height: 220px;
                             VerticalLayout {
                                 padding: 20px;
-                                spacing: 10px;
-                                Text {
-                                    text: "実行環境";
-                                    color: AppTheme.text-primary;
-                                    font-size: 18px;
-                                    font-weight: 700;
-                                }
+                                spacing: 11px;
+                                PanelTitle { text: "実行環境"; }
                                 Text {
                                     text: root.environment-status;
                                     color: AppTheme.text-secondary;
                                     font-size: 14px;
                                     wrap: word-wrap;
                                 }
+                                Rectangle { vertical-stretch: 1; }
                                 Button {
                                     text: "環境を再確認";
                                     primary: false;
@@ -727,28 +746,20 @@ export component MainWindow inherits Window {
                                 }
                             }
                         }
-                        Rectangle {
+                        Panel {
                             horizontal-stretch: 1;
-                            height: 190px;
-                            border-radius: 18px;
-                            border-width: 1px;
-                            border-color: AppTheme.card-border;
-                            background: AppTheme.card-background;
+                            min-height: 220px;
                             VerticalLayout {
                                 padding: 20px;
-                                spacing: 10px;
-                                Text {
-                                    text: "保存の既定値";
-                                    color: AppTheme.text-primary;
-                                    font-size: 18px;
-                                    font-weight: 700;
-                                }
+                                spacing: 11px;
+                                PanelTitle { text: "保存の既定値"; }
                                 Text {
                                     text: "保存前に変更内容とstatus tokenを確認し、既存のstaged変更や競合がある場合は停止します。";
                                     color: AppTheme.text-secondary;
                                     font-size: 14px;
                                     wrap: word-wrap;
                                 }
+                                Rectangle { vertical-stretch: 1; }
                                 StatusPill {
                                     pill-text: "安全優先";
                                     pill-background: AppTheme.success-soft;
@@ -758,17 +769,20 @@ export component MainWindow inherits Window {
                         }
                     }
                     Rectangle {
-                        border-radius: 18px;
+                        border-radius: 16px;
                         border-width: 1px;
-                        border-color: #bfdbfe;
-                        background: #eff6ff;
+                        border-color: AppTheme.accent-border;
+                        background: AppTheme.accent-soft;
                         VerticalLayout {
-                            padding: 20px;
-                            spacing: 8px;
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            padding-top: 18px;
+                            padding-bottom: 18px;
+                            spacing: 6px;
                             Text {
                                 text: "設定移植の進捗";
                                 color: #1e3a8a;
-                                font-size: 17px;
+                                font-size: 16px;
                                 font-weight: 700;
                             }
                             Text {
