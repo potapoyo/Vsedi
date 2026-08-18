@@ -1,3 +1,4 @@
 fn main() {
+    slint_build::compile("ui/main.slint").expect("Slint compilation failed");
     tauri_build::build()
 }

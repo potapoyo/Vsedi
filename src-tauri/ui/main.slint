@@ -1,0 +1,137 @@
+import { Button, GroupBox, LineEdit, ScrollView } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Vsedi";
+    width: 1120px;
+    height: 760px;
+
+    in-out property <string> environment-status: "確認中…";
+    in-out property <string> project-status: "Unity projectを選択してください。";
+    in-out property <string> project-path: "";
+    callback inspect-project(string);
+
+    Rectangle {
+        background: #f7f7f8;
+
+        HorizontalLayout {
+            padding: 20px;
+            spacing: 18px;
+
+            Rectangle {
+                width: 220px;
+                background: #20252b;
+                border-radius: 10px;
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 12px;
+
+                    Text {
+                        text: "Vsedi";
+                        color: white;
+                        font-size: 24px;
+                        accessible-label: "Vsedi";
+                    }
+                    Text {
+                        text: "安全なローカル保存";
+                        color: #cbd5e1;
+                    }
+                    Text {
+                        text: "Slint移植試作";
+                        color: #93c5fd;
+                    }
+                    Rectangle { height: 1px; background: #475569; }
+                    Text {
+                        text: "Home";
+                        color: white;
+                        accessible-role: button;
+                        accessible-id: "nav-home";
+                    }
+                    Text {
+                        text: "保存履歴";
+                        color: #cbd5e1;
+                        accessible-role: button;
+                        accessible-id: "nav-history";
+                    }
+                    Text {
+                        text: "設定";
+                        color: #cbd5e1;
+                        accessible-role: button;
+                        accessible-id: "nav-settings";
+                    }
+                    Rectangle { height: 1px; background: #475569; }
+                    Text {
+                        text: "Rust service boundary";
+                        color: #94a3b8;
+                        font-size: 12px;
+                    }
+                }
+            }
+
+            ScrollView {
+                HorizontalLayout {
+                    width: 100%;
+                    padding-right: 12px;
+                    VerticalLayout {
+                        spacing: 16px;
+
+                        Text {
+                            text: "Home";
+                            font-size: 28px;
+                            font-weight: 700;
+                        }
+
+                        GroupBox {
+                            title: "実行環境";
+                            VerticalLayout {
+                                padding: 14px;
+                                Text {
+                                    text: root.environment-status;
+                                    accessible-id: "environment-status";
+                                }
+                            }
+                        }
+
+                        GroupBox {
+                            title: "Project診断";
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 10px;
+                                LineEdit {
+                                    text <=> root.project-path;
+                                    placeholder-text: "Unity projectのpath";
+                                    accessible-id: "project-path";
+                                }
+                                Button {
+                                    text: "Projectを診断";
+                                    clicked => { root.inspect-project(root.project-path); }
+                                    accessible-id: "inspect-project";
+                                }
+                                Text {
+                                    text: root.project-status;
+                                    wrap: word-wrap;
+                                    accessible-id: "project-status";
+                                }
+                            }
+                        }
+
+                        GroupBox {
+                            title: "移植の進捗";
+                            VerticalLayout {
+                                padding: 14px;
+                                Text {
+                                    text: "M3のRustサービスをSlint UIから呼び出す最小試作です。";
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: "次の段階で変更一覧、diff、作業保存、保存履歴を移植します。";
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
