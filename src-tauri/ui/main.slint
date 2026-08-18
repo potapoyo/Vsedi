@@ -1,28 +1,104 @@
-import { Button, GroupBox, LineEdit, Palette, ScrollView } from "std-widgets.slint";
+import { Button, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 export global AppTheme {
-    out property <color> page-background: #f8fafc;
+    out property <color> page-background: #f4f6fb;
     out property <color> text-primary: #172033;
     out property <color> text-secondary: #475569;
     out property <color> text-muted: #64748b;
     out property <color> card-background: #ffffff;
-    out property <color> card-border: #cbd5e1;
+    out property <color> card-border: #dbe2ee;
     out property <color> accent: #2563eb;
+    out property <color> accent-soft: #dbeafe;
+    out property <color> success: #047857;
+    out property <color> success-soft: #d1fae5;
+    out property <color> warning: #b45309;
+    out property <color> warning-soft: #fef3c7;
+}
+
+component StatusPill inherits Rectangle {
+    in property <string> pill-text;
+    in property <color> pill-background: AppTheme.accent-soft;
+    in property <color> pill-foreground: #1d4ed8;
+    height: 26px;
+    width: 92px;
+    border-radius: 13px;
+    background: pill-background;
+
+    Text {
+        x: 12px;
+        y: 0px;
+        height: parent.height;
+        text: root.pill-text;
+        color: root.pill-foreground;
+        font-size: 12px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+}
+
+component MetricCard inherits Rectangle {
+    in property <string> eyebrow;
+    in property <string> value;
+    in property <string> detail;
+    in property <color> marker: AppTheme.accent;
+    height: 118px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: AppTheme.card-border;
+    background: AppTheme.card-background;
+
+    Rectangle {
+        x: 0px;
+        y: 16px;
+        width: 4px;
+        height: 48px;
+        border-radius: 2px;
+        background: root.marker;
+    }
+    VerticalLayout {
+        padding-left: 18px;
+        padding-right: 16px;
+        padding-top: 14px;
+        padding-bottom: 12px;
+        spacing: 4px;
+        Text {
+            text: root.eyebrow;
+            color: AppTheme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.value;
+            color: AppTheme.text-primary;
+            font-size: 17px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        Text {
+            text: root.detail;
+            color: AppTheme.text-secondary;
+            font-size: 12px;
+            wrap: word-wrap;
+            overflow: elide;
+        }
+    }
 }
 
 export component MainWindow inherits Window {
     title: "Vsedi";
-    width: 1120px;
-    height: 760px;
+    width: 1280px;
+    height: 860px;
 
     in-out property <string> environment-status: "確認中…";
     in-out property <string> project-status: "Unity projectを選択してください。";
     in-out property <string> project-path: "";
     in-out property <string> worktree-status: "変更内容を読み込んでください。";
+    in-out property <string> worktree-files: "変更一覧は、プロジェクトを選択すると表示されます。";
     in-out property <string> worktree-token: "";
     in-out property <string> save-memo: "";
     in-out property <string> save-status: "";
     in-out property <string> history-status: "保存履歴を読み込んでください。";
+    callback refresh-application();
     callback inspect-project(string);
     callback refresh-worktree(string);
     callback save-project(string, string, string);
@@ -38,94 +114,228 @@ export component MainWindow inherits Window {
         background: AppTheme.page-background;
 
         HorizontalLayout {
-            padding: 20px;
-            spacing: 18px;
+            padding: 24px;
+            spacing: 24px;
 
             Rectangle {
-                width: 220px;
-                background: #20252b;
-                border-radius: 10px;
+                width: 244px;
+                border-radius: 18px;
+                background: #18202b;
 
                 VerticalLayout {
-                    padding: 18px;
-                    spacing: 12px;
+                    padding: 22px;
+                    spacing: 14px;
 
+                    Text {
+                        text: "LOCAL FIRST";
+                        color: #93c5fd;
+                        font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 2px;
+                    }
                     Text {
                         text: "Vsedi";
                         color: white;
-                        font-size: 24px;
+                        font-size: 30px;
+                        font-weight: 700;
                         accessible-label: "Vsedi";
                     }
                     Text {
                         text: "安全なローカル保存";
                         color: #cbd5e1;
+                        font-size: 13px;
                     }
                     Text {
-                        text: "Slint移植試作";
+                        text: "Slint 移植試作";
                         color: #93c5fd;
+                        font-size: 13px;
                     }
-                    Rectangle { height: 1px; background: #475569; }
-                    Text {
-                        text: "Home";
-                        color: white;
-                        accessible-role: button;
-                        accessible-id: "nav-home";
+
+                    Rectangle { height: 1px; background: #39485c; }
+
+                    Rectangle {
+                        height: 42px;
+                        border-radius: 10px;
+                        background: #29364a;
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            Text {
+                                text: "ホーム";
+                                color: white;
+                                font-size: 14px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                accessible-role: button;
+                                accessible-id: "nav-home";
+                            }
+                        }
                     }
                     Text {
                         text: "保存履歴";
                         color: #cbd5e1;
+                        font-size: 14px;
                         accessible-role: button;
                         accessible-id: "nav-history";
                     }
                     Text {
                         text: "設定";
                         color: #cbd5e1;
+                        font-size: 14px;
                         accessible-role: button;
                         accessible-id: "nav-settings";
                     }
-                    Rectangle { height: 1px; background: #475569; }
+
+                    Rectangle { height: 1px; background: #39485c; }
+                    Rectangle { vertical-stretch: 1; }
                     Text {
                         text: "Rust service boundary";
                         color: #94a3b8;
                         font-size: 12px;
                     }
+                    Text {
+                        text: "M3 → M4";
+                        color: #64748b;
+                        font-size: 11px;
+                    }
                 }
             }
 
             ScrollView {
-                HorizontalLayout {
+                horizontal-stretch: 1;
+                VerticalLayout {
                     width: 100%;
-                    padding-right: 12px;
-                    VerticalLayout {
-                        spacing: 16px;
+                    padding-right: 10px;
+                    padding-bottom: 12px;
+                    spacing: 18px;
 
-                        Text {
-                            text: "Home";
-                            font-size: 28px;
-                            font-weight: 700;
-                            color: AppTheme.text-primary;
-                        }
-
-                        GroupBox {
-                            title: "実行環境";
+                    Rectangle {
+                        height: 66px;
+                        background: transparent;
+                        HorizontalLayout {
+                            spacing: 10px;
                             VerticalLayout {
-                                padding: 14px;
+                                spacing: 2px;
                                 Text {
-                                    text: root.environment-status;
+                                    text: "VSEDI";
+                                    color: AppTheme.text-muted;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    letter-spacing: 2px;
+                                }
+                                Text {
+                                    text: "ホーム";
                                     color: AppTheme.text-primary;
-                                    accessible-id: "environment-status";
+                                    font-size: 30px;
+                                    font-weight: 700;
                                 }
                             }
+                            Rectangle { horizontal-stretch: 1; }
+                            Button {
+                                text: "再読込";
+                                primary: false;
+                                accessible-id: "refresh-home";
+                                clicked => { root.refresh-application(); }
+                            }
                         }
+                    }
 
-                        GroupBox {
-                            title: "Project診断";
+                    Rectangle {
+                        height: 176px;
+                        border-radius: 22px;
+                        background: #111827;
+                        HorizontalLayout {
+                            padding: 24px;
+                            spacing: 18px;
                             VerticalLayout {
-                                padding: 14px;
+                                spacing: 8px;
+                                Text {
+                                    text: "制作のセーブポイント";
+                                    color: #93c5fd;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    letter-spacing: 1px;
+                                }
+                                Text {
+                                    text: "管理する project を選択";
+                                    color: white;
+                                    font-size: 26px;
+                                    font-weight: 700;
+                                }
+                                Text {
+                                    text: "project を選ぶと、Unity / VRChat / Git の状態を確認して、この repository の作業画面を開きます。";
+                                    color: #cbd5e1;
+                                    font-size: 13px;
+                                    wrap: word-wrap;
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Button {
+                                text: "Projectを追加";
+                                primary: true;
+                                accessible-id: "add-project";
+                                clicked => { root.pick-project(); }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+                        MetricCard {
+                            horizontal-stretch: 1;
+                            eyebrow: "実行環境";
+                            value: "確認済み";
+                            detail: root.environment-status;
+                            marker: AppTheme.success;
+                        }
+                        MetricCard {
+                            horizontal-stretch: 1;
+                            eyebrow: "Project 診断";
+                            value: root.project-path == "" ? "未選択" : "選択済み";
+                            detail: root.project-status;
+                            marker: AppTheme.accent;
+                        }
+                        MetricCard {
+                            horizontal-stretch: 1;
+                            eyebrow: "保存状態";
+                            value: root.worktree-status;
+                            detail: root.save-status == "" ? "変更を確認すると状態を表示します。" : root.save-status;
+                            marker: root.worktree-token == "" ? AppTheme.warning : AppTheme.success;
+                        }
+                    }
+
+                    Rectangle {
+                        border-radius: 18px;
+                        border-width: 1px;
+                        border-color: AppTheme.card-border;
+                        background: AppTheme.card-background;
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 12px;
+                            HorizontalLayout {
+                                Text {
+                                    text: "Project 診断";
+                                    color: AppTheme.text-primary;
+                                    font-size: 17px;
+                                    font-weight: 700;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                StatusPill {
+                                    pill-text: root.project-path == "" ? "未選択" : "確認待ち";
+                                    pill-background: root.project-path == "" ? AppTheme.warning-soft : AppTheme.accent-soft;
+                                    pill-foreground: root.project-path == "" ? AppTheme.warning : #1d4ed8;
+                                }
+                            }
+                            Text {
+                                text: "Unity / VRChat project の場所を確認します。既存のrepositoryは変更しません。";
+                                color: AppTheme.text-secondary;
+                                font-size: 12px;
+                            }
+                            HorizontalLayout {
                                 spacing: 10px;
                                 LineEdit {
+                                    horizontal-stretch: 1;
                                     text <=> root.project-path;
-                                    placeholder-text: "Unity projectのpath";
+                                    placeholder-text: "Unity project の path";
                                     accessible-id: "project-path";
                                 }
                                 Button {
@@ -140,20 +350,53 @@ export component MainWindow inherits Window {
                                     clicked => { root.inspect-project(root.project-path); }
                                     accessible-id: "inspect-project";
                                 }
-                                Text {
-                                    text: root.project-status;
-                                    color: AppTheme.text-secondary;
-                                    wrap: word-wrap;
-                                    accessible-id: "project-status";
-                                }
+                            }
+                            Rectangle {
+                                height: 1px;
+                                background: AppTheme.card-border;
+                            }
+                            Text {
+                                text: root.project-status;
+                                color: AppTheme.text-secondary;
+                                font-size: 13px;
+                                wrap: word-wrap;
+                                accessible-id: "project-status";
                             }
                         }
+                    }
 
-                        GroupBox {
-                            title: "作業を保存";
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 254px;
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: AppTheme.card-border;
+                            background: AppTheme.card-background;
                             VerticalLayout {
-                                padding: 14px;
+                                padding: 18px;
                                 spacing: 10px;
+                                HorizontalLayout {
+                                    Text {
+                                        text: "現在の作業";
+                                        color: AppTheme.text-primary;
+                                        font-size: 17px;
+                                        font-weight: 700;
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    StatusPill {
+                                        pill-text: root.worktree-token == "" ? "未確認" : "確認済み";
+                                        pill-background: root.worktree-token == "" ? AppTheme.warning-soft : AppTheme.success-soft;
+                                        pill-foreground: root.worktree-token == "" ? AppTheme.warning : AppTheme.success;
+                                    }
+                                }
+                                Text {
+                                    text: "保存対象は repository 全体です。project 外の変更も表示します。";
+                                    color: AppTheme.text-secondary;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
                                 Button {
                                     text: "変更を確認";
                                     primary: false;
@@ -162,64 +405,127 @@ export component MainWindow inherits Window {
                                 }
                                 Text {
                                     text: root.worktree-status;
+                                    color: AppTheme.text-primary;
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                }
+                                Text {
+                                    text: root.worktree-files;
                                     color: AppTheme.text-secondary;
+                                    font-size: 12px;
                                     wrap: word-wrap;
-                                    accessible-id: "worktree-status";
+                                    overflow: elide;
+                                    accessible-id: "worktree-files";
                                 }
-                                LineEdit {
-                                    text <=> root.save-memo;
-                                    placeholder-text: "保存メモ";
-                                    accessible-id: "save-memo";
-                                }
-                                Button {
-                                    text: "作業を保存";
-                                    primary: true;
-                                    clicked => { root.save-project(root.project-path, root.worktree-token, root.save-memo); }
-                                    accessible-id: "save-project";
+                                Rectangle { vertical-stretch: 1; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    LineEdit {
+                                        horizontal-stretch: 1;
+                                        text <=> root.save-memo;
+                                        placeholder-text: "保存メモ";
+                                        accessible-id: "save-memo";
+                                    }
+                                    Button {
+                                        text: "作業を保存";
+                                        primary: true;
+                                        clicked => { root.save-project(root.project-path, root.worktree-token, root.save-memo); }
+                                        accessible-id: "save-project";
+                                    }
                                 }
                                 Text {
                                     text: root.save-status;
-                                    color: AppTheme.text-secondary;
+                                    color: AppTheme.success;
+                                    font-size: 12px;
                                     wrap: word-wrap;
                                     accessible-id: "save-status";
                                 }
                             }
                         }
-
-                        GroupBox {
-                            title: "保存履歴";
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 254px;
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: AppTheme.card-border;
+                            background: AppTheme.card-background;
                             VerticalLayout {
-                                padding: 14px;
+                                padding: 18px;
                                 spacing: 10px;
+                                HorizontalLayout {
+                                    Text {
+                                        text: "保存履歴";
+                                        color: AppTheme.text-primary;
+                                        font-size: 17px;
+                                        font-weight: 700;
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    StatusPill {
+                                        pill-text: "ローカル";
+                                        pill-background: AppTheme.accent-soft;
+                                        pill-foreground: #1d4ed8;
+                                    }
+                                }
+                                Text {
+                                    text: "保存した commit を新しい順に表示します。履歴を読むだけでは現在の作業を変更しません。";
+                                    color: AppTheme.text-secondary;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
                                 Button {
                                     text: "履歴を読み込む";
                                     primary: false;
                                     clicked => { root.refresh-history(root.project-path); }
                                     accessible-id: "refresh-history";
                                 }
-                                Text {
-                                    text: root.history-status;
-                                    color: AppTheme.text-secondary;
-                                    wrap: word-wrap;
-                                    accessible-id: "history-status";
+                                Rectangle {
+                                    vertical-stretch: 1;
+                                    border-radius: 10px;
+                                    background: #f8fafc;
+                                    border-width: 1px;
+                                    border-color: #e2e8f0;
+                                    Text {
+                                        x: 12px;
+                                        y: 10px;
+                                        width: parent.width - 24px;
+                                        height: parent.height - 20px;
+                                        text: root.history-status;
+                                        color: AppTheme.text-secondary;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                        overflow: elide;
+                                        accessible-id: "history-status";
+                                    }
                                 }
                             }
                         }
+                    }
 
-                        GroupBox {
-                            title: "移植の進捗";
-                            VerticalLayout {
-                                padding: 14px;
-                                Text {
-                                    text: "M3のRustサービスをSlint UIから呼び出す最小試作です。";
-                                    color: AppTheme.text-secondary;
-                                    wrap: word-wrap;
-                                }
-                                Text {
-                                    text: "次の段階で変更一覧、diff、作業保存、保存履歴を移植します。";
-                                    color: AppTheme.text-muted;
-                                    wrap: word-wrap;
-                                }
+                    Rectangle {
+                        border-radius: 18px;
+                        border-width: 1px;
+                        border-color: #bfdbfe;
+                        background: #eff6ff;
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 6px;
+                            Text {
+                                text: "移植の進捗";
+                                color: #1e3a8a;
+                                font-size: 15px;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: "M3 の Rust service を Slint UI から呼び出す画面を、既存のカード型レイアウトへ移植しています。";
+                                color: #1e40af;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: "✓ project 診断   ✓ 変更確認   ✓ 作業保存   ✓ 保存履歴";
+                                color: #1d4ed8;
+                                font-size: 12px;
+                                font-weight: 700;
                             }
                         }
                     }

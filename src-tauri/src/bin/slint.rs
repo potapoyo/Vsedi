@@ -4,7 +4,7 @@ use slint::SharedString;
 use std::thread;
 use vsedi_lib::{
     application,
-    models::{DiagnosticSeverity, ProjectDiagnostic, ProjectStatus, VpmTrackingPolicy},
+    models::{ChangeKind, DiagnosticSeverity, ProjectDiagnostic, ProjectStatus, VpmTrackingPolicy},
 };
 
 slint::include_modules!();
@@ -15,6 +15,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // window so standard widgets do not briefly render with the OS dark theme.
     window.invoke_force_light_theme();
     window.set_environment_status(SharedString::from(environment_text()));
+
+    let weak_window = window.as_weak();
+    window.on_refresh_application(move || {
+        if let Some(window) = weak_window.upgrade() {
+            window.set_environment_status(SharedString::from(environment_text()));
+        }
+    });
 
     let weak_window = window.as_weak();
     window.on_inspect_project(move |path| {
@@ -39,12 +46,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(window) = weak_window.upgrade() {
                     match result {
-                        Ok((summary, token)) => {
+                        Ok((summary, token, worktree_files)) => {
                             window.set_worktree_status(SharedString::from(summary));
+                            window.set_worktree_files(SharedString::from(worktree_files));
                             window.set_worktree_token(SharedString::from(token));
                         }
                         Err(error) => {
                             window.set_worktree_status(SharedString::from(error));
+                            window.set_worktree_files(SharedString::from(
+                                "変更一覧を読み込めませんでした。",
+                            ));
                             window.set_worktree_token(SharedString::new());
                         }
                     }
@@ -162,7 +173,7 @@ fn project_text(diagnostic: &ProjectDiagnostic) -> String {
     )
 }
 
-fn worktree_text(snapshot: vsedi_lib::models::WorktreeSnapshot) -> (String, String) {
+fn worktree_text(snapshot: vsedi_lib::models::WorktreeSnapshot) -> (String, String, String) {
     let mut summary = format!("変更 {}件", snapshot.files.len());
     if snapshot.has_conflicts {
         summary.push_str(" / 競合あり");
@@ -170,7 +181,32 @@ fn worktree_text(snapshot: vsedi_lib::models::WorktreeSnapshot) -> (String, Stri
     if snapshot.has_existing_staged_changes {
         summary.push_str(" / 既存のstaged変更あり");
     }
-    (summary, snapshot.status_token)
+    let mut files = snapshot
+        .files
+        .iter()
+        .take(5)
+        .map(|file| format!("{}  {}", change_kind_text(&file.change_kind), file.path))
+        .collect::<Vec<_>>();
+    if snapshot.files.len() > 5 {
+        files.push(format!("…さらに {}件あります。", snapshot.files.len() - 5));
+    }
+    if files.is_empty() {
+        files.push("保存対象の変更はありません。".to_owned());
+    }
+    (summary, snapshot.status_token, files.join("\n"))
+}
+
+fn change_kind_text(kind: &ChangeKind) -> &'static str {
+    match kind {
+        ChangeKind::Added => "追加",
+        ChangeKind::Modified => "変更",
+        ChangeKind::Deleted => "削除",
+        ChangeKind::Renamed => "名前変更",
+        ChangeKind::Copied => "複製",
+        ChangeKind::TypeChanged => "種類変更",
+        ChangeKind::Unmerged => "競合",
+        ChangeKind::Untracked => "未管理",
+    }
 }
 
 fn history_text(page: vsedi_lib::models::HistoryPage) -> String {
@@ -207,5 +243,28 @@ mod tests {
         )
         .collect::<Vec<_>>();
         assert_eq!(pickers.len(), 1);
+    }
+
+    #[test]
+    fn formats_changed_files_for_the_graphical_work_card() {
+        let snapshot = vsedi_lib::models::WorktreeSnapshot {
+            status_token: "token".to_owned(),
+            files: vec![vsedi_lib::models::ChangedFile {
+                path: "Assets/Scene.unity".to_owned(),
+                old_path: None,
+                change_kind: ChangeKind::Modified,
+                staged: false,
+                unstaged: true,
+                binary: false,
+                outside_project: false,
+            }],
+            has_conflicts: false,
+            has_existing_staged_changes: false,
+        };
+
+        let (summary, token, files) = worktree_text(snapshot);
+        assert_eq!(summary, "変更 1件");
+        assert_eq!(token, "token");
+        assert_eq!(files, "変更  Assets/Scene.unity");
     }
 }
