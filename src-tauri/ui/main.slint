@@ -8,7 +8,15 @@ export component MainWindow inherits Window {
     in-out property <string> environment-status: "確認中…";
     in-out property <string> project-status: "Unity projectを選択してください。";
     in-out property <string> project-path: "";
+    in-out property <string> worktree-status: "変更内容を読み込んでください。";
+    in-out property <string> worktree-token: "";
+    in-out property <string> save-memo: "";
+    in-out property <string> save-status: "";
+    in-out property <string> history-status: "保存履歴を読み込んでください。";
     callback inspect-project(string);
+    callback refresh-worktree(string);
+    callback save-project(string, string, string);
+    callback refresh-history(string);
 
     Rectangle {
         background: #f7f7f8;
@@ -111,6 +119,57 @@ export component MainWindow inherits Window {
                                     text: root.project-status;
                                     wrap: word-wrap;
                                     accessible-id: "project-status";
+                                }
+                            }
+                        }
+
+                        GroupBox {
+                            title: "作業を保存";
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 10px;
+                                Button {
+                                    text: "変更を確認";
+                                    clicked => { root.refresh-worktree(root.project-path); }
+                                    accessible-id: "refresh-worktree";
+                                }
+                                Text {
+                                    text: root.worktree-status;
+                                    wrap: word-wrap;
+                                    accessible-id: "worktree-status";
+                                }
+                                LineEdit {
+                                    text <=> root.save-memo;
+                                    placeholder-text: "保存メモ";
+                                    accessible-id: "save-memo";
+                                }
+                                Button {
+                                    text: "作業を保存";
+                                    clicked => { root.save-project(root.project-path, root.worktree-token, root.save-memo); }
+                                    accessible-id: "save-project";
+                                }
+                                Text {
+                                    text: root.save-status;
+                                    wrap: word-wrap;
+                                    accessible-id: "save-status";
+                                }
+                            }
+                        }
+
+                        GroupBox {
+                            title: "保存履歴";
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 10px;
+                                Button {
+                                    text: "履歴を読み込む";
+                                    clicked => { root.refresh-history(root.project-path); }
+                                    accessible-id: "refresh-history";
+                                }
+                                Text {
+                                    text: root.history-status;
+                                    wrap: word-wrap;
+                                    accessible-id: "history-status";
                                 }
                             }
                         }
