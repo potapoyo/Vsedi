@@ -116,26 +116,20 @@
 
 この段階を Internal Alpha 候補とする。実装および Windows / Apple Silicon macOS 配布物の確認まで完了している。
 
-## M4 — 安全な復元
+## Slint移植 — 検討・試作
 
-目的: Vsedi の中心価値である「壊しても戻れる」を成立させる。
+目的: 現在のTauri + React UIを、Rustサービス層を活かしながらSlintのネイティブUIへ移植できるか検証する。
 
-タスク:
+方針:
 
-- revision selection
-- restore preview
-- safety snapshot design ADR
-- safety snapshot implementation
-- restore operation
-- restore validation
-- return-to-pre-restore flow
-- Unity-running warning
+- M3のTauri / React版を動作する基準として保持する。
+- `src-tauri/src/services`、`git`、`models`、`errors`を優先的に再利用できる境界へ整理する。
+- Home、保存履歴、ファイルツリー、スクロール、Rust command相当の非同期処理を小さなSlint試作で検証する。
+- 全面移行の判断は、ビルド、Windows / Apple Silicon macOS、UIテスト、アクセシビリティを確認してから行う。
 
-完了条件:
+## M4 — 保留（安全な復元）
 
-> 保存後に project を変更し、履歴から過去状態へ戻し、さらに復元前状態へも戻れる。
-
-M0〜M4 を **Vsedi Core** とする。
+安全な復元はSlint移植の方向性と基盤が固まった後に再計画する。旧M4計画ファイルは2026-08-18に破棄し、ADR 0014は将来の再検討用の参考記録として保留する。
 
 ## M5 — リモートバックアップ
 
