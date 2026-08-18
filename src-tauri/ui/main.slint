@@ -161,6 +161,81 @@ component SummaryCard inherits Rectangle {
     }
 }
 
+component FileRow inherits Rectangle {
+    in property <string> status;
+    in property <string> path;
+    height: root.path == "" ? 0px : 42px;
+    visible: root.path != "";
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    background: AppTheme.surface;
+
+    Rectangle {
+        x: 10px;
+        y: 8px;
+        width: 72px;
+        height: 24px;
+        border-radius: 12px;
+        background: root.status == "削除" || root.status == "競合" ? #fff1f2 : root.status == "追加" || root.status == "未管理" ? AppTheme.warning-soft : AppTheme.accent-soft;
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.status;
+            color: root.status == "削除" || root.status == "競合" ? #be123c : root.status == "追加" || root.status == "未管理" ? AppTheme.warning : AppTheme.accent;
+            font-size: 11px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        x: 96px;
+        y: 0px;
+        width: parent.width - 108px;
+        height: parent.height;
+        text: root.path;
+        color: AppTheme.text-primary;
+        font-size: 13px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+component HistoryRow inherits Rectangle {
+    in property <string> commit-id;
+    in property <string> memo;
+    height: root.commit-id == "" ? 0px : 50px;
+    visible: root.commit-id != "";
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    background: AppTheme.surface;
+
+    Text {
+        x: 14px;
+        y: 0px;
+        width: 96px;
+        height: parent.height;
+        text: root.commit-id;
+        color: AppTheme.accent;
+        font-size: 13px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 124px;
+        y: 0px;
+        width: parent.width - 138px;
+        height: parent.height;
+        text: root.memo == "" ? "（メモなし）" : root.memo;
+        color: AppTheme.text-primary;
+        font-size: 13px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
 export component MainWindow inherits Window {
     title: "Vsedi";
     preferred-width: 1280px;
@@ -173,10 +248,34 @@ export component MainWindow inherits Window {
     in-out property <string> project-path: "";
     in-out property <string> worktree-status: "変更内容を読み込んでください。";
     in-out property <string> worktree-files: "変更一覧は、プロジェクトを選択すると表示されます。";
+    in-out property <string> worktree-empty-message: "変更一覧を読み込んでください。";
+    in-out property <string> worktree-file-1-status: "";
+    in-out property <string> worktree-file-1-path: "";
+    in-out property <string> worktree-file-2-status: "";
+    in-out property <string> worktree-file-2-path: "";
+    in-out property <string> worktree-file-3-status: "";
+    in-out property <string> worktree-file-3-path: "";
+    in-out property <string> worktree-file-4-status: "";
+    in-out property <string> worktree-file-4-path: "";
+    in-out property <string> worktree-file-5-status: "";
+    in-out property <string> worktree-file-5-path: "";
     in-out property <string> worktree-token: "";
     in-out property <string> save-memo: "";
     in-out property <string> save-status: "";
     in-out property <string> history-status: "保存履歴を読み込んでください。";
+    in-out property <string> history-empty-message: "保存履歴を読み込んでください。";
+    in-out property <string> history-entry-1-id: "";
+    in-out property <string> history-entry-1-memo: "";
+    in-out property <string> history-entry-2-id: "";
+    in-out property <string> history-entry-2-memo: "";
+    in-out property <string> history-entry-3-id: "";
+    in-out property <string> history-entry-3-memo: "";
+    in-out property <string> history-entry-4-id: "";
+    in-out property <string> history-entry-4-memo: "";
+    in-out property <string> history-entry-5-id: "";
+    in-out property <string> history-entry-5-memo: "";
+    in-out property <string> history-entry-6-id: "";
+    in-out property <string> history-entry-6-memo: "";
     in-out property <string> current-page: "HOME";
     callback refresh-application();
     callback navigate(string);
@@ -497,13 +596,35 @@ export component MainWindow inherits Window {
                                     font-weight: 700;
                                     wrap: word-wrap;
                                 }
-                                Text {
-                                    text: root.worktree-files;
-                                    color: AppTheme.text-secondary;
-                                    font-size: 13px;
-                                    wrap: word-wrap;
-                                    overflow: elide;
-                                    accessible-id: "worktree-files";
+                                VerticalLayout {
+                                    spacing: 5px;
+                                    Text {
+                                        text: root.worktree-empty-message;
+                                        color: AppTheme.text-muted;
+                                        font-size: 12px;
+                                        visible: root.worktree-file-1-path == "";
+                                        accessible-id: "worktree-files";
+                                    }
+                                    FileRow {
+                                        status: root.worktree-file-1-status;
+                                        path: root.worktree-file-1-path;
+                                    }
+                                    FileRow {
+                                        status: root.worktree-file-2-status;
+                                        path: root.worktree-file-2-path;
+                                    }
+                                    FileRow {
+                                        status: root.worktree-file-3-status;
+                                        path: root.worktree-file-3-path;
+                                    }
+                                    FileRow {
+                                        status: root.worktree-file-4-status;
+                                        path: root.worktree-file-4-path;
+                                    }
+                                    FileRow {
+                                        status: root.worktree-file-5-status;
+                                        path: root.worktree-file-5-path;
+                                    }
                                 }
                                 Rectangle { vertical-stretch: 1; }
                                 HorizontalLayout {
@@ -563,17 +684,40 @@ export component MainWindow inherits Window {
                                     background: AppTheme.surface-soft;
                                     border-width: 1px;
                                     border-color: AppTheme.border;
-                                    Text {
-                                        x: 14px;
-                                        y: 12px;
-                                        width: parent.width - 28px;
-                                        height: parent.height - 24px;
-                                        text: root.history-status;
-                                        color: AppTheme.text-secondary;
-                                        font-size: 13px;
-                                        wrap: word-wrap;
-                                        overflow: elide;
-                                        accessible-id: "history-status";
+                                    VerticalLayout {
+                                        padding: 8px;
+                                        spacing: 4px;
+                                        Text {
+                                            text: root.history-empty-message;
+                                            color: AppTheme.text-muted;
+                                            font-size: 12px;
+                                            visible: root.history-entry-1-id == "";
+                                            accessible-id: "history-status";
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-1-id;
+                                            memo: root.history-entry-1-memo;
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-2-id;
+                                            memo: root.history-entry-2-memo;
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-3-id;
+                                            memo: root.history-entry-3-memo;
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-4-id;
+                                            memo: root.history-entry-4-memo;
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-5-id;
+                                            memo: root.history-entry-5-memo;
+                                        }
+                                        HistoryRow {
+                                            commit-id: root.history-entry-6-id;
+                                            memo: root.history-entry-6-memo;
+                                        }
                                     }
                                 }
                             }
@@ -650,17 +794,40 @@ export component MainWindow inherits Window {
                                 border-width: 1px;
                                 border-color: AppTheme.border;
                                 background: AppTheme.surface-soft;
-                                Text {
-                                    x: 18px;
-                                    y: 16px;
-                                    width: parent.width - 36px;
-                                    height: parent.height - 32px;
-                                    text: root.history-status;
-                                    color: AppTheme.text-primary;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                    overflow: elide;
-                                    accessible-id: "history-page-status";
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 5px;
+                                    Text {
+                                        text: root.history-empty-message;
+                                        color: AppTheme.text-muted;
+                                        font-size: 13px;
+                                        visible: root.history-entry-1-id == "";
+                                        accessible-id: "history-page-status";
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-1-id;
+                                        memo: root.history-entry-1-memo;
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-2-id;
+                                        memo: root.history-entry-2-memo;
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-3-id;
+                                        memo: root.history-entry-3-memo;
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-4-id;
+                                        memo: root.history-entry-4-memo;
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-5-id;
+                                        memo: root.history-entry-5-memo;
+                                    }
+                                    HistoryRow {
+                                        commit-id: root.history-entry-6-id;
+                                        memo: root.history-entry-6-memo;
+                                    }
                                 }
                             }
                         }

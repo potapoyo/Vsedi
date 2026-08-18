@@ -48,22 +48,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let weak_window = weak_window.clone();
         thread::spawn(move || {
             let result = application::read_worktree_snapshot(&path)
-                .map(worktree_text)
+                .map(worktree_view)
                 .map_err(|error| format!("{} ({:?})", error.message, error.code));
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(window) = weak_window.upgrade() {
                     match result {
-                        Ok((summary, token, worktree_files)) => {
-                            window.set_worktree_status(SharedString::from(summary));
-                            window.set_worktree_files(SharedString::from(worktree_files));
-                            window.set_worktree_token(SharedString::from(token));
+                        Ok(view) => {
+                            window.set_worktree_status(SharedString::from(view.summary));
+                            window.set_worktree_files(SharedString::from(view.files_text));
+                            window
+                                .set_worktree_empty_message(SharedString::from(view.empty_message));
+                            window.set_worktree_token(SharedString::from(view.token));
+                            set_worktree_rows(&window, &view.rows);
                         }
                         Err(error) => {
                             window.set_worktree_status(SharedString::from(error));
                             window.set_worktree_files(SharedString::from(
                                 "変更一覧を読み込めませんでした。",
                             ));
+                            window.set_worktree_empty_message(SharedString::from(
+                                "変更一覧を読み込めませんでした。",
+                            ));
                             window.set_worktree_token(SharedString::new());
+                            set_worktree_rows(&window, &[]);
                         }
                     }
                 }
@@ -105,11 +112,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let weak_window = weak_window.clone();
         thread::spawn(move || {
             let result = application::read_history(&path, 0)
-                .map(history_text)
-                .unwrap_or_else(|error| format!("{} ({:?})", error.message, error.code));
+                .map(history_view)
+                .map_err(|error| format!("{} ({:?})", error.message, error.code));
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(window) = weak_window.upgrade() {
-                    window.set_history_status(SharedString::from(result));
+                    match result {
+                        Ok((summary, empty_message, rows)) => {
+                            window.set_history_status(SharedString::from(summary));
+                            window.set_history_empty_message(SharedString::from(empty_message));
+                            set_history_rows(&window, &rows);
+                        }
+                        Err(error) => {
+                            window.set_history_status(SharedString::from(error.clone()));
+                            window.set_history_empty_message(SharedString::from(error));
+                            set_history_rows(&window, &[]);
+                        }
+                    }
                 }
             });
         });
@@ -180,7 +198,16 @@ fn project_text(diagnostic: &ProjectDiagnostic) -> String {
     )
 }
 
-fn worktree_text(snapshot: vsedi_lib::models::WorktreeSnapshot) -> (String, String, String) {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorktreeView {
+    summary: String,
+    token: String,
+    files_text: String,
+    empty_message: String,
+    rows: Vec<(String, String)>,
+}
+
+fn worktree_view(snapshot: vsedi_lib::models::WorktreeSnapshot) -> WorktreeView {
     let mut summary = format!("変更 {}件", snapshot.files.len());
     if snapshot.has_conflicts {
         summary.push_str(" / 競合あり");
@@ -200,7 +227,47 @@ fn worktree_text(snapshot: vsedi_lib::models::WorktreeSnapshot) -> (String, Stri
     if files.is_empty() {
         files.push("保存対象の変更はありません。".to_owned());
     }
-    (summary, snapshot.status_token, files.join("\n"))
+    let rows = snapshot
+        .files
+        .iter()
+        .take(5)
+        .map(|file| {
+            (
+                change_kind_text(&file.change_kind).to_owned(),
+                file.path.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let empty_message = if rows.is_empty() {
+        "保存対象の変更はありません。".to_owned()
+    } else {
+        String::new()
+    };
+    WorktreeView {
+        summary,
+        token: snapshot.status_token,
+        files_text: files.join("\n"),
+        empty_message,
+        rows,
+    }
+}
+
+fn set_worktree_rows(window: &MainWindow, rows: &[(String, String)]) {
+    let (status, path) = rows.first().cloned().unwrap_or_default();
+    window.set_worktree_file_1_status(SharedString::from(status));
+    window.set_worktree_file_1_path(SharedString::from(path));
+    let (status, path) = rows.get(1).cloned().unwrap_or_default();
+    window.set_worktree_file_2_status(SharedString::from(status));
+    window.set_worktree_file_2_path(SharedString::from(path));
+    let (status, path) = rows.get(2).cloned().unwrap_or_default();
+    window.set_worktree_file_3_status(SharedString::from(status));
+    window.set_worktree_file_3_path(SharedString::from(path));
+    let (status, path) = rows.get(3).cloned().unwrap_or_default();
+    window.set_worktree_file_4_status(SharedString::from(status));
+    window.set_worktree_file_4_path(SharedString::from(path));
+    let (status, path) = rows.get(4).cloned().unwrap_or_default();
+    window.set_worktree_file_5_status(SharedString::from(status));
+    window.set_worktree_file_5_path(SharedString::from(path));
 }
 
 fn change_kind_text(kind: &ChangeKind) -> &'static str {
@@ -216,19 +283,48 @@ fn change_kind_text(kind: &ChangeKind) -> &'static str {
     }
 }
 
-fn history_text(page: vsedi_lib::models::HistoryPage) -> String {
-    if page.entries.is_empty() {
-        return "保存履歴はありません。".to_owned();
-    }
-    let mut lines = page
+fn history_view(page: vsedi_lib::models::HistoryPage) -> (String, String, Vec<(String, String)>) {
+    let rows = page
         .entries
         .iter()
-        .map(|entry| format!("{}  {}", entry.short_commit_id, entry.memo))
+        .take(6)
+        .map(|entry| (entry.short_commit_id.clone(), entry.memo.clone()))
         .collect::<Vec<_>>();
-    if page.next_offset.is_some() {
-        lines.push("…さらに履歴があります。".to_owned());
+    if rows.is_empty() {
+        return (
+            "保存履歴はありません。".to_owned(),
+            "保存履歴はありません。".to_owned(),
+            rows,
+        );
     }
-    lines.join("\n")
+    let more = if page.next_offset.is_some() {
+        "（さらに履歴があります）"
+    } else {
+        ""
+    };
+    let summary = format!("{}件の保存履歴{}", page.entries.len(), more);
+    (summary, String::new(), rows)
+}
+
+fn set_history_rows(window: &MainWindow, rows: &[(String, String)]) {
+    let (commit_id, memo) = rows.first().cloned().unwrap_or_default();
+    window.set_history_entry_1_id(SharedString::from(commit_id));
+    window.set_history_entry_1_memo(SharedString::from(memo));
+    let (commit_id, memo) = rows.get(1).cloned().unwrap_or_default();
+    window.set_history_entry_2_id(SharedString::from(commit_id));
+    window.set_history_entry_2_memo(SharedString::from(memo));
+    let (commit_id, memo) = rows.get(2).cloned().unwrap_or_default();
+    window.set_history_entry_3_id(SharedString::from(commit_id));
+    window.set_history_entry_3_memo(SharedString::from(memo));
+    let (commit_id, memo) = rows.get(3).cloned().unwrap_or_default();
+    window.set_history_entry_4_id(SharedString::from(commit_id));
+    window.set_history_entry_4_memo(SharedString::from(memo));
+    let (commit_id, memo) = rows.get(4).cloned().unwrap_or_default();
+    window.set_history_entry_5_id(SharedString::from(commit_id));
+    window.set_history_entry_5_memo(SharedString::from(memo));
+    let (commit_id, memo) = rows.get(5).cloned().unwrap_or_default();
+    window.set_history_entry_6_id(SharedString::from(commit_id));
+    window.set_history_entry_6_memo(SharedString::from(memo));
 }
 
 #[cfg(test)]
@@ -279,10 +375,31 @@ mod tests {
             has_existing_staged_changes: false,
         };
 
-        let (summary, token, files) = worktree_text(snapshot);
-        assert_eq!(summary, "変更 1件");
-        assert_eq!(token, "token");
-        assert_eq!(files, "変更  Assets/Scene.unity");
+        let view = worktree_view(snapshot);
+        assert_eq!(view.summary, "変更 1件");
+        assert_eq!(view.token, "token");
+        assert_eq!(
+            view.rows,
+            vec![("変更".to_owned(), "Assets/Scene.unity".to_owned())]
+        );
+    }
+
+    #[test]
+    fn formats_history_entries_for_graphical_rows() {
+        let page = vsedi_lib::models::HistoryPage {
+            entries: vec![vsedi_lib::models::HistoryEntry {
+                commit_id: "abcdef123456".to_owned(),
+                short_commit_id: "abcdef1".to_owned(),
+                memo: "保存メモ".to_owned(),
+                author_time: "2026-08-19T00:00:00Z".to_owned(),
+            }],
+            next_offset: None,
+        };
+
+        let (summary, empty_message, rows) = history_view(page);
+        assert_eq!(summary, "1件の保存履歴");
+        assert!(empty_message.is_empty());
+        assert_eq!(rows, vec![("abcdef1".to_owned(), "保存メモ".to_owned())]);
     }
 
     #[test]
