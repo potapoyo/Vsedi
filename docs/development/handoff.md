@@ -9,7 +9,7 @@
 - 保存履歴は20件単位で読み込み、古い履歴を「さらに読み込む」で追加取得できる
 - 履歴・保存詳細・設定などの長い画面は、サイドバーを固定したメイン領域でスクロールできる
 - Windows / Apple Silicon macOS の配布物確認まで完了
-- 現行の比較基準はTauri / React版M3。Slint移植は、既存のカード型ホーム画面、M3のworktree確認・保存・履歴接続まで実装済み
+- 現行の比較基準はTauri / React版M3。Slint移植は、既存のカード型ホーム画面と「ホーム・保存履歴・設定」の画面階層、M3のworktree確認・保存・履歴接続まで実装済み
 - 移植中はReact/Tauri前提の自動Actionsを停止している
 - M4（安全な復元）の旧計画は破棄し、移植方針が固まるまで保留
 
@@ -48,6 +48,7 @@ pnpm install --frozen-lockfile
 - Slintからの環境/project診断、worktree確認、作業保存、保存履歴
 - Slintのカード型ホーム（ヒーロー、状態カード、Project診断、作業・履歴カード、移植進捗）
 - worktree変更の概要と最大5件のファイル一覧表示、native folder picker
+- 「ホーム」「保存履歴」「設定」のナビゲーションとページ別スクロール
 - Slint testing backendによる主要操作コントロールの検出テスト
 
 ## 検証コマンド
@@ -84,13 +85,13 @@ pnpm slint:test
 - アプリの設定・最近のProject一覧は各マシンのアプリデータに保存され、Git管理対象ではありません。別マシンではProjectを再登録してください。
 - リモート操作、過去状態への復元、履歴書換えは未実装です。安全な復元はSlint移植後に再計画します。
 - 現環境ではRustテスト49件、Slint UIテスト1件がすべて成功しています。過去に`HOME`未設定環境ではログテスト1件が失敗したため、別マシンで再現した場合は`HOME`を設定してから再実行してください。
-- Slint画面は現在、全体/repository設定、file diff詳細、repository初期化preview、履歴詳細をまだ持ちません。これらはユーザーテスト後の次の移植単位です。
+- Slint画面は現在、設定の詳細編集、file diff詳細、repository初期化preview、履歴詳細をまだ持ちません。設定と履歴はページの入口まで実装済みで、これらはユーザーテスト後の次の移植単位です。
 - 配布物は未署名です。
 
 ## 次の開発候補
 
 1. ユーザーによるSlint native UIの実project確認
-2. 設定、file diff、repository初期化preview、履歴詳細の移植
+2. 設定の詳細編集、file diff、repository初期化preview、履歴詳細の移植
 3. Windows / Apple Silicon macOS native起動・bundle確認
 4. Slint用Actionsへ置換して自動実行を復帰
 5. 移植完了後のM4安全な復元再計画

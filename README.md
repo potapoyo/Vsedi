@@ -22,7 +22,7 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装・検証済みです。Windows / Apple Silicon macOSの配布物確認まで完了しています。Slint移植は `codex/slint-port` で進行中で、既存のカード型ホーム画面とRust serviceを使うM3のworktree確認・保存・履歴接続まで実装済みです。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md)、別マシン向けの手順は [`docs/development/handoff.md`](docs/development/handoff.md) を参照してください。
+Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装・検証済みです。Windows / Apple Silicon macOSの配布物確認まで完了しています。Slint移植は `codex/slint-port` で進行中で、既存のカード型ホーム画面、「ホーム・保存履歴・設定」の画面階層、Rust serviceを使うM3のworktree確認・保存・履歴接続まで実装済みです。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md)、別マシン向けの手順は [`docs/development/handoff.md`](docs/development/handoff.md) を参照してください。
 
 ### `.gitignore` 初期ルールのカスタマイズ
 
@@ -64,7 +64,7 @@ pnpm slint:build
 
 ### Slint 移植試作
 
-Slint版のnative UIは、Tauri/WebViewを起動せずに次で確認できます。現在は既存React版のカード型ホームを基準に、ヒーロー、環境・Project・保存状態カード、Project診断、作業保存、履歴、移植進捗を表示します。
+Slint版のnative UIは、Tauri/WebViewを起動せずに次で確認できます。現在は既存React版のカード型ホームを基準に、ヒーロー、環境・Projectカード、Project診断、作業保存、履歴、移植進捗を表示し、サイドバーから「ホーム・保存履歴・設定」を切り替えられます。
 
 ```sh
 pnpm slint:dev
