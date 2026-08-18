@@ -127,6 +127,24 @@
 - Home、保存履歴、ファイルツリー、スクロール、Rust command相当の非同期処理を小さなSlint試作で検証する。
 - 全面移行の判断は、ビルド、Windows / Apple Silicon macOS、UIテスト、アクセシビリティを確認してから行う。
 
+現在の進捗:
+
+- `codex/slint-port` ブランチで自動Actionsを一時停止
+- Rust側にUI非依存のapplication facadeを追加
+- Slint 1.17.1の最小native windowを追加
+- Slintから環境診断とproject診断を呼び出す経路を確認
+- 既存Rustテスト49件が成功
+
+未完了:
+
+- M3画面全体の移植
+- Windows / Apple Silicon macOSのSlint native起動・bundle確認
+- Slint向けUI/presenterテスト
+- ユーザーによる実Unity projectの受け入れ確認
+- Slint用Actionsへの置換と自動実行の復帰
+
+詳細な移植判断は [ADR 0015](../adr/0015-slint-native-ui-migration.md) を参照する。
+
 ## M4 — 保留（安全な復元）
 
 安全な復元はSlint移植の方向性と基盤が固まった後に再計画する。旧M4計画ファイルは2026-08-18に破棄し、ADR 0014は将来の再検討用の参考記録として保留する。
