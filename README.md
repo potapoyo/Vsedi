@@ -22,7 +22,7 @@ Vsedi は、VRChat 向け Unity プロジェクトの作業を安全に保存・
 
 ## 現在の段階
 
-Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装・検証済みです。Windows / Apple Silicon macOSの配布物確認まで完了しています。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md)、別マシン向けの手順は [`docs/development/handoff.md`](docs/development/handoff.md) を参照してください。
+Tauri v2 / React の基盤、M2のproject診断、M3のローカル保存（repository初期化preview、変更確認、作業保存、履歴・commit詳細、表示可能なfile diff）、管理Project一覧、複数タグ、Project検索、repository単位の設定と作業画面を実装・検証済みです。Windows / Apple Silicon macOSの配布物確認まで完了しています。Slint移植は `codex/slint-port` で進行中で、Rust serviceを使う最小native UIとM3のworktree確認・保存・履歴接続まで実装済みです。リモート操作・復元・履歴書換えはまだ提供しません。実装ロードマップは [`docs/development/roadmap.md`](docs/development/roadmap.md)、詳細計画は [`docs/development/m3-plan.md`](docs/development/m3-plan.md)、別マシン向けの手順は [`docs/development/handoff.md`](docs/development/handoff.md) を参照してください。
 
 ### `.gitignore` 初期ルールのカスタマイズ
 
@@ -55,9 +55,28 @@ pnpm tauri dev
 pnpm tauri build
 pnpm generate-types
 pnpm check-generated-types
+pnpm slint:check
+pnpm slint:test
+pnpm slint:build
 ```
 
 `pnpm tauri dev` / `pnpm tauri build` は Rust、Tauri の OS 依存ライブラリ、対象 OS の native toolchain が必要です。公式対応環境は Windows と Apple Silicon macOS です。
+
+### Slint 移植試作
+
+Slint版の最小native UIは、Tauri/WebViewを起動せずに次で確認できます。
+
+```sh
+pnpm slint:dev
+```
+
+project pathを入力して「Projectを診断」を押すと、既存のRust diagnostics serviceがSlint画面から呼び出されます。「変更を確認」「作業を保存」「履歴を読み込む」は、M3のGit serviceをUIスレッド外で実行します。自動UI確認はSlint testing backendを使う次のコマンドです。
+
+```sh
+pnpm slint:test
+```
+
+移植中は自動Actionsを停止しています。移植完了後にSlint用workspace test/buildへ置き換え、Windows / Apple Silicon macOSのnative確認を追加してから自動実行を戻します。方針と受け入れ条件は [ADR 0015](docs/adr/0015-slint-native-ui-migration.md) を参照してください。
 
 ### Windows の開発環境
 
