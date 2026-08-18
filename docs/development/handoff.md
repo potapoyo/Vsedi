@@ -4,12 +4,13 @@
 
 ## 現在地
 
-- 対象ブランチ: `codex/m3-local-save`
+- 対象ブランチ: `codex/slint-port`
 - M3（ローカル保存・履歴確認）は実装・検証完了
 - 保存履歴は20件単位で読み込み、古い履歴を「さらに読み込む」で追加取得できる
 - 履歴・保存詳細・設定などの長い画面は、サイドバーを固定したメイン領域でスクロールできる
 - Windows / Apple Silicon macOS の配布物確認まで完了
-- 現行の実装基準はTauri / React版M3で、次の開発対象はSlint移植の検討・試作
+- 現行の比較基準はTauri / React版M3。Slint移植は最小native UIとM3のworktree確認・保存・履歴接続まで実装済み
+- 移植中はReact/Tauri前提の自動Actionsを停止している
 - M4（安全な復元）の旧計画は破棄し、移植方針が固まるまで保留
 
 この文書は、別マシンで現在の状態を再現するための入口です。作業開始時は、必ずリモートのブランチ先端を取得してください。
@@ -18,8 +19,8 @@
 
 ```sh
 git fetch origin
-git switch codex/m3-local-save
-git pull --ff-only origin codex/m3-local-save
+git switch codex/slint-port
+git pull --ff-only origin codex/slint-port
 mise install
 pnpm install --frozen-lockfile
 ```
@@ -43,6 +44,9 @@ pnpm install --frozen-lockfile
 - Windows配布物の手動GUI smoke
 - macOS DMG / app と Windows MSI / NSIS の配布ビルド
 - Windows表示用パスの整形（`\\?\`除去、`/`表示）
+- Slint 1.17.1の最小native windowとRust application facade
+- Slintからの環境/project診断、worktree確認、作業保存、保存履歴
+- Slint testing backendによる主要操作コントロールの検出テスト
 
 ## 検証コマンド
 
@@ -51,9 +55,22 @@ CI=true pnpm typecheck
 CI=true pnpm build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo check --manifest-path src-tauri/Cargo.toml --bin slint
+cargo test --manifest-path src-tauri/Cargo.toml --bin slint
+cargo build --manifest-path src-tauri/Cargo.toml --bin slint --release
 CI=true pnpm check-generated-types
 pnpm exec tauri build
 ```
+
+Slint版の確認には次を使います。
+
+```sh
+pnpm slint:dev
+pnpm slint:test
+```
+
+`pnpm slint:dev`ではproject pathを入力し、「Projectを診断」「変更を確認」「作業を保存」「履歴を読み込む」を確認できます。保存を試す場合は、既存Git repositoryの一時的な作業用projectを使い、保存前にworktreeのstatus tokenを取得してください。
 
 配布物は次に生成されます。
 
@@ -64,12 +81,14 @@ pnpm exec tauri build
 
 - アプリの設定・最近のProject一覧は各マシンのアプリデータに保存され、Git管理対象ではありません。別マシンではProjectを再登録してください。
 - リモート操作、過去状態への復元、履歴書換えは未実装です。安全な復元はSlint移植後に再計画します。
-- 現環境ではRustテスト48件、Playwright UIテスト11件がすべて成功しています。過去に`HOME`未設定環境ではログテスト1件が失敗したため、別マシンで再現した場合は`HOME`を設定してから再実行してください。
+- 現環境ではRustテスト49件、Slint UIテスト1件がすべて成功しています。過去に`HOME`未設定環境ではログテスト1件が失敗したため、別マシンで再現した場合は`HOME`を設定してから再実行してください。
+- Slint画面は現在、native folder picker、全体/ repository設定、file diff詳細、repository初期化previewをまだ持たず、project pathの直接入力を使います。これらはユーザーテスト後の次の移植単位です。
 - 配布物は未署名です。
 
 ## 次の開発候補
 
-1. SlintのRust UI試作環境とビルド経路
-2. Home / 保存履歴 / ファイルツリーの移植検証
-3. RustサービスとSlint UIの状態・非同期境界
-4. 移植方針確定後のM4安全な復元再計画
+1. ユーザーによるSlint native UIの実project確認
+2. native folder picker、設定、file diff、repository初期化previewの移植
+3. Windows / Apple Silicon macOS native起動・bundle確認
+4. Slint用Actionsへ置換して自動実行を復帰
+5. 移植完了後のM4安全な復元再計画
