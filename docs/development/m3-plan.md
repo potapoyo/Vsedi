@@ -65,7 +65,7 @@ M3では、診断済みのUnity / VRChat projectを登録し、Gitの用語を�
 git pull --ff-only origin codex/m3-local-save
 ```
 
-M3の実装・テスト・Windows / macOS配布物確認は完了した。README、roadmap、Diary、別マシン向け手順の更新を反映し、次の開発はM4の安全な復元とする。
+M3の実装・テスト・Windows / macOS配布物確認は完了した。README、roadmap、Diary、別マシン向け手順の更新を反映し、次の開発はSlint移植の検討・試作とする。M4の安全な復元は一旦保留する。
 
 別マシンでの再開手順と既知の注意点は [`handoff.md`](handoff.md) にまとめている。
 
@@ -82,6 +82,7 @@ Windows native UI CIは旧external driver方式を廃止し、アプリ内のdeb
 - Project画面の共通ヘッダー省略と、サイドバーの選択中Project枠表示
 - 保存メモ、`add`、`commit`、保存直前の再検証、保存中のGit CLI進捗表示
 - Finder風の細いcommit履歴一覧、列幅を調整できるcommit詳細の変更ファイルツリー、表示可能なdiff
+- 保存履歴など長い画面のメイン領域スクロールと固定サイドバー
 - 管理Project一覧、最終更新順、複数タグ設定・タグ絞り込み・Project検索
 - ホーム、現在の作業、保存履歴、リポジトリ設定、全体設定の分離
 - 全体のVPM既定値とrepository固有override
@@ -233,6 +234,6 @@ DMG同梱アプリの確認時に確認された、プロセス起動直後の�
 
 Phase A〜Fを実装・検証し、Playwright、native UI CI、macOS DMG / app、Windows MSI / NSISの結果を記録した。README、roadmap、Diary、別マシン向け引き継ぎ資料も更新済みで、M3はInternal Alpha候補として完了とする。
 
-次の残作業はM4の安全な復元（preview、スナップショット、復元後検証）である。スプラッシュの初期化失敗時画面と診断ログもM4以降のUX改善として扱う。
+次の残作業はSlint移植の試作とUI / Rust境界の検証である。安全な復元（preview、スナップショット、復元後検証）は移植方針が固まった後に再計画する。
 
 Windows native CIのdriver調査はembedded方式への移行で完了した。今後も製品実装、通常CI、Playwright、native自動テスト、手動配布物smokeの結果を個別に記録し、未確認項目を成功扱いしない。

@@ -42,6 +42,7 @@ function MainWindow() {
   const [repositoryTree, setRepositoryTree] = useState<RepositoryTreeSnapshot | null>(null);
   const [fileViewMode, setFileViewMode] = useState<FileViewMode>("CHANGES");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyNextOffset, setHistoryNextOffset] = useState<number | null>(null);
   const [commitDetail, setCommitDetail] = useState<CommitDetail | null>(null);
   const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
   const [initializationPreview, setInitializationPreview] = useState<RepositoryInitializationPreview | null>(null);
@@ -103,6 +104,7 @@ function MainWindow() {
     setWorktree(null);
     setRepositoryTree(null);
     setHistory([]);
+    setHistoryNextOffset(null);
     setCommitDetail(null);
     setFileDiff(null);
     setInitializationPreview(null);
@@ -113,16 +115,17 @@ function MainWindow() {
 
   const reloadRepositoryData = async (projectPath = project?.path, expectedGeneration?: number) => {
     if (!projectPath) return;
-    const [state, snapshot, entries, tree] = await Promise.all([
+    const [state, snapshot, historyPage, tree] = await Promise.all([
       readRepositoryState(projectPath),
       readWorktreeSnapshot(projectPath),
-      readHistory(projectPath),
+      readHistory(projectPath, 0),
       fileViewMode === "ALL" ? readRepositoryTree(projectPath) : Promise.resolve(null),
     ]);
     if (expectedGeneration !== undefined && expectedGeneration !== selectionGeneration.current) return;
     setRepositoryState(state);
     setWorktree(snapshot);
-    setHistory(entries);
+    setHistory(historyPage.entries);
+    setHistoryNextOffset(historyPage.nextOffset);
     if (tree) setRepositoryTree(tree);
   };
 
@@ -336,6 +339,19 @@ function MainWindow() {
     });
   };
 
+  const loadMoreHistory = async () => {
+    if (!project || historyNextOffset === null) return;
+    const offset = historyNextOffset;
+    await run("保存履歴を追加読み込み", async () => {
+      const historyPage = await readHistory(project.path, offset);
+      setHistory((current) => {
+        const knownCommitIds = new Set(current.map((entry) => entry.commitId));
+        return [...current, ...historyPage.entries.filter((entry) => !knownCommitIds.has(entry.commitId))];
+      });
+      setHistoryNextOffset(historyPage.nextOffset);
+    });
+  };
+
   const showCommitDiff = async (path: string) => {
     if (!project || !commitDetail) return;
     await run("差分を読み込む", async () => {
@@ -382,8 +398,8 @@ function MainWindow() {
         : route.section === "HISTORY" ? "保存履歴" : "リポジトリ設定";
 
   return (
-    <main className="min-h-screen bg-mist text-ink">
-      <div className="mx-auto flex min-h-screen max-w-[1440px]">
+    <main className="h-screen overflow-hidden bg-mist text-ink">
+      <div className="mx-auto flex h-full max-w-[1440px]">
         <AppSidebar
           route={route}
           project={project}
@@ -391,7 +407,7 @@ function MainWindow() {
           onRepository={navigateRepository}
           onGlobalSettings={(section) => setRoute({ page: "GLOBAL_SETTINGS", section })}
         />
-        <div className="min-w-0 flex-1 px-5 py-6 sm:px-8">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8" data-app-content="true">
           {(route.page !== "REPOSITORY" || !project) && (
             <AppHeader
               pageTitle={pageTitle}
@@ -462,10 +478,12 @@ function MainWindow() {
           {route.page === "REPOSITORY" && project && route.section === "HISTORY" && (
             <HistoryPage
               history={history}
+              historyNextOffset={historyNextOffset}
               commitDetail={commitDetail}
               fileDiff={fileDiff}
               busy={isBusy}
               onSelectCommit={(entry) => void selectCommit(entry)}
+              onLoadMore={() => void loadMoreHistory()}
               onShowDiff={(path) => void showCommitDiff(path)}
             />
           )}
@@ -502,7 +520,7 @@ function AppSidebar({ route, project, onHome, onRepository, onGlobalSettings }: 
 }) {
   const repositoryOpen = route.page === "REPOSITORY";
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 lg:block">
+    <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-3 py-6 lg:block">
       <div className="px-3 pb-7"><p className="text-xs font-bold uppercase tracking-[0.28em] text-accent">Local first</p><h1 className="mt-2 text-2xl font-bold tracking-tight">Vsedi</h1></div>
       <nav className="space-y-1" aria-label="メインナビゲーション">
         <NavigationButton active={route.page === "HOME"} onClick={onHome}>ホーム</NavigationButton>
@@ -636,8 +654,32 @@ function RepositorySetup({ project, preview, busy, onPreview, onApply, onCancel,
   return <div className="space-y-5"><Card className="border-sky-200 bg-sky-50"><CardHeader><h3 className="font-semibold text-sky-950">ローカル保存を準備する</h3></CardHeader><CardContent><p className="text-sm leading-6 text-sky-900">このUnity projectにはまだGit repositoryがありません。作成内容を確認してから、Unity用のignore ruleとともにローカル保存を始められます。</p>{!preview ? <Button className="mt-4" onClick={onPreview} disabled={busy}>作成内容を確認</Button> : <div className="mt-4 space-y-3 rounded-xl bg-white/80 p-4">{preview.ignoreFiles.map((file) => <div key={file.path}><p className="text-sm font-semibold text-slate-800">{file.path}{file.willCreate ? "（新規作成）" : ""}</p><p className="mt-1 text-xs text-slate-600">{file.missingRules.length ? `${file.missingRules.length} 件のruleを追加します。` : "変更はありません。"}</p></div>)}{preview.canInitialize ? <div className="flex gap-2"><Button onClick={onApply} disabled={busy}>この内容で初期化</Button><Button variant="secondary" onClick={onCancel} disabled={busy}>キャンセル</Button></div> : <p className="text-sm text-rose-800">{preview.blockingReason}</p>}</div>}</CardContent></Card>{onGoToSettings && <DiagnosticSummary project={project} onGoToSettings={onGoToSettings} />}</div>;
 }
 
-function HistoryPage({ history, commitDetail, fileDiff, busy, onSelectCommit, onShowDiff }: { history: HistoryEntry[]; commitDetail: CommitDetail | null; fileDiff: FileDiff | null; busy: boolean; onSelectCommit: (entry: HistoryEntry) => void; onShowDiff: (path: string) => void }) {
-  return <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"><Card><CardHeader><h3 className="font-semibold">保存履歴</h3><p className="mt-1 text-xs text-slate-500">過去の保存を選ぶと、変更内容を確認できます。</p></CardHeader><CardContent>{history.length ? <div className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="min-w-[30rem]"><div className="grid grid-cols-[minmax(14rem,1fr)_11rem_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500"><span>保存メモ</span><span>保存日時</span><span>commit</span></div><div aria-label="保存履歴" role="list">{history.map((entry) => { const selected = commitDetail?.commitId === entry.commitId; return <div role="listitem" key={entry.commitId}><button type="button" onClick={() => onSelectCommit(entry)} disabled={busy} aria-pressed={selected} className={`grid w-full grid-cols-[minmax(14rem,1fr)_11rem_7rem] items-center gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm transition last:border-b-0 ${selected ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}><span className="truncate font-semibold" title={entry.memo}>{entry.memo}</span><span className={`truncate text-xs ${selected ? "text-slate-300" : "text-slate-500"}`} title={entry.authorTime}>{formatDate(entry.authorTime)}</span><span className={`font-mono text-xs ${selected ? "text-slate-300" : "text-slate-500"}`} title={entry.commitId}>{entry.shortCommitId}</span></button></div>; })}</div></div></div> : <p className="py-6 text-center text-sm text-slate-500">まだ保存履歴はありません。</p>}</CardContent></Card><div className="space-y-5">{commitDetail ? <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">保存の詳細</h3><p className="mt-1 truncate text-sm text-slate-700" title={commitDetail.memo}>{commitDetail.memo}</p><p className="mt-1 break-all text-xs text-slate-500">{commitDetail.commitId} · {formatDate(commitDetail.authorTime)}</p></div><StatusPill label="保存済み" tone="good" /></div></CardHeader><CardContent><ChangedFiles files={commitDetail.files} viewMode="CHANGES" fileContext="COMMIT" onSelect={onShowDiff} /><p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">安全な復元はM4でこの画面から開始します。履歴を選択しただけでは現在の作業は変わりません。</p></CardContent></Card> : <Card><CardContent><p className="py-8 text-center text-sm text-slate-500">左から保存を選択してください。</p></CardContent></Card>}{fileDiff && <DiffPanel diff={fileDiff} />}</div></div>;
+function HistoryPage({ history, historyNextOffset, commitDetail, fileDiff, busy, onSelectCommit, onLoadMore, onShowDiff }: { history: HistoryEntry[]; historyNextOffset: number | null; commitDetail: CommitDetail | null; fileDiff: FileDiff | null; busy: boolean; onSelectCommit: (entry: HistoryEntry) => void; onLoadMore: () => void; onShowDiff: (path: string) => void }) {
+  return <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+    <Card>
+      <CardHeader><h3 className="font-semibold">保存履歴</h3><p className="mt-1 text-xs text-slate-500">新しい履歴から20件ずつ表示します。過去の保存を選ぶと、変更内容を確認できます。</p></CardHeader>
+      <CardContent>
+        {history.length ? <>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="min-w-[30rem]">
+              <div className="grid grid-cols-[minmax(14rem,1fr)_11rem_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500"><span>保存メモ</span><span>保存日時</span><span>commit</span></div>
+              <div aria-label="保存履歴" role="list">
+                {history.map((entry) => {
+                  const selected = commitDetail?.commitId === entry.commitId;
+                  return <div role="listitem" key={entry.commitId}><button type="button" onClick={() => onSelectCommit(entry)} disabled={busy} aria-pressed={selected} className={`grid w-full grid-cols-[minmax(14rem,1fr)_11rem_7rem] items-center gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm transition last:border-b-0 ${selected ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}><span className="truncate font-semibold" title={entry.memo}>{entry.memo}</span><span className={`truncate text-xs ${selected ? "text-slate-300" : "text-slate-500"}`} title={entry.authorTime}>{formatDate(entry.authorTime)}</span><span className={`font-mono text-xs ${selected ? "text-slate-300" : "text-slate-500"}`} title={entry.commitId}>{entry.shortCommitId}</span></button></div>;
+                })}
+              </div>
+            </div>
+          </div>
+          {historyNextOffset !== null && <div className="mt-3 flex justify-center"><Button variant="secondary" onClick={onLoadMore} disabled={busy}>{busy ? "読み込み中…" : "さらに読み込む"}</Button></div>}
+        </> : <p className="py-6 text-center text-sm text-slate-500">まだ保存履歴はありません。</p>}
+      </CardContent>
+    </Card>
+    <div className="space-y-5">
+      {commitDetail ? <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">保存の詳細</h3><p className="mt-1 truncate text-sm text-slate-700" title={commitDetail.memo}>{commitDetail.memo}</p><p className="mt-1 break-all text-xs text-slate-500">{commitDetail.commitId} · {formatDate(commitDetail.authorTime)}</p></div><StatusPill label="保存済み" tone="good" /></div></CardHeader><CardContent><ChangedFiles files={commitDetail.files} viewMode="CHANGES" fileContext="COMMIT" onSelect={onShowDiff} /><p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">安全な復元はM4でこの画面から開始します。履歴を選択しただけでは現在の作業は変わりません。</p></CardContent></Card> : <Card><CardContent><p className="py-8 text-center text-sm text-slate-500">左から保存を選択してください。</p></CardContent></Card>}
+      {fileDiff && <DiffPanel diff={fileDiff} />}
+    </div>
+  </div>;
 }
 
 function ProjectTagEditor({ tags, busy, onSave }: { tags: string[]; busy: boolean; onSave: (tags: string[]) => void }) {

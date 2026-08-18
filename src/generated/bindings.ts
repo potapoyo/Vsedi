@@ -77,6 +77,8 @@ export type SaveResult = { commitId: string, shortCommitId: string, memo: string
 
 export type HistoryEntry = { commitId: string, shortCommitId: string, memo: string, authorTime: string, };
 
+export type HistoryPage = { entries: Array<HistoryEntry>, nextOffset: number | null, };
+
 export type CommitDetail = { commitId: string, shortCommitId: string, memo: string, authorTime: string, parentIds: Array<string>, files: Array<ChangedFile>, };
 
 export type FileDiffKind = "TEXT" | "BINARY" | "UNAVAILABLE";

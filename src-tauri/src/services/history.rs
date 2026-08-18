@@ -1,7 +1,7 @@
 use crate::{
     errors::{AppError, AppResult, ErrorCode},
     git::{command::run_git, diagnostics},
-    models::{ChangeKind, ChangedFile, CommitDetail, HistoryEntry},
+    models::{ChangeKind, ChangedFile, CommitDetail, HistoryEntry, HistoryPage},
     platform::process::find_executable,
 };
 use std::path::{Path, PathBuf};
@@ -9,28 +9,36 @@ use tracing::{debug, info};
 
 const HISTORY_FIELD_SEPARATOR: char = '\x1f';
 const HISTORY_RECORD_SEPARATOR: char = '\x1e';
+const HISTORY_PAGE_SIZE: usize = 20;
 
 pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
+    Ok(read_history_page(project_path, 0)?.entries)
+}
+
+pub fn read_history_page(project_path: &str, offset: usize) -> AppResult<HistoryPage> {
     debug!(operation = "read_history", project_path = %project_path, "history read started");
     let (git, root) = repository(project_path)?;
     let head =
         run_git(&git, &["rev-parse", "--verify", "HEAD"], Some(&root)).map_err(read_error)?;
     if head.status != Some(0) {
-        return Ok(Vec::new());
+        return Ok(HistoryPage {
+            entries: Vec::new(),
+            next_offset: None,
+        });
     }
-    let output = run_git(
-        &git,
-        &[
-            "log",
-            "-n",
-            "50",
-            "--no-decorate",
-            "--no-color",
-            "--pretty=format:%H%x1f%h%x1f%s%x1f%aI%x1e",
-        ],
-        Some(&root),
-    )
-    .map_err(read_error)?;
+    let skip_arg = format!("--skip={offset}");
+    let mut args = vec![
+        "log",
+        "-n",
+        "21",
+        "--no-decorate",
+        "--no-color",
+        "--pretty=format:%H%x1f%h%x1f%s%x1f%aI%x1e",
+    ];
+    if offset > 0 {
+        args.push(&skip_arg);
+    }
+    let output = run_git(&git, &args, Some(&root)).map_err(read_error)?;
     if output.status != Some(0) {
         return Err(AppError::with_detail(
             ErrorCode::HistoryReadFailed,
@@ -57,12 +65,22 @@ pub fn read_history(project_path: &str) -> AppResult<Vec<HistoryEntry>> {
             author_time: values[3].to_owned(),
         })
         .collect::<Vec<_>>();
+    let page = paginate_history(entries, offset);
     info!(
         operation = "read_history",
-        entry_count = entries.len(),
+        entry_count = page.entries.len(),
         "history read completed"
     );
-    Ok(entries)
+    Ok(page)
+}
+
+fn paginate_history(mut entries: Vec<HistoryEntry>, offset: usize) -> HistoryPage {
+    let has_more = entries.len() > HISTORY_PAGE_SIZE;
+    entries.truncate(HISTORY_PAGE_SIZE);
+    HistoryPage {
+        entries,
+        next_offset: has_more.then_some(offset.saturating_add(HISTORY_PAGE_SIZE)),
+    }
 }
 
 fn parse_history_fields(output: &str) -> AppResult<Vec<String>> {
@@ -342,6 +360,26 @@ mod tests {
         let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x1faaaaaaa\x1ffirst save\x1e\n";
 
         assert!(parse_history_fields(output).is_err());
+    }
+
+    #[test]
+    fn paginates_history_and_reports_older_entries() {
+        let entries = (0..21)
+            .map(|index| HistoryEntry {
+                commit_id: format!("{index:040x}"),
+                short_commit_id: format!("{index:07x}"),
+                memo: format!("save {index}"),
+                author_time: "2026-08-13T10:00:00+09:00".to_owned(),
+            })
+            .collect::<Vec<_>>();
+
+        let first_page = paginate_history(entries, 0);
+        assert_eq!(first_page.entries.len(), 20);
+        assert_eq!(first_page.next_offset, Some(20));
+
+        let last_page = paginate_history(vec![first_page.entries[0].clone()], 20);
+        assert_eq!(last_page.entries.len(), 1);
+        assert_eq!(last_page.next_offset, None);
     }
 
     #[test]

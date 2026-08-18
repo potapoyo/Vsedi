@@ -302,6 +302,13 @@ pub struct HistoryEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct HistoryPage {
+    pub entries: Vec<HistoryEntry>,
+    pub next_offset: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitDetail {
     pub commit_id: String,
     pub short_commit_id: String,

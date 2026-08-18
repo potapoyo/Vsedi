@@ -184,7 +184,11 @@ function installTauriMocks(page: Page) {
             case "read_repository_tree":
               return structuredClone(state.repositoryTree ?? { statusToken: state.worktree.statusToken, files: state.worktree.files });
             case "read_history":
-              return state.history;
+              {
+                const offset = args?.offset ?? 0;
+                const entries = state.history.slice(offset, offset + 20);
+                return { entries, nextOffset: offset + entries.length < state.history.length ? offset + 20 : null };
+              }
             case "save_worktree": {
               if (state.saveDelayMs) await new Promise((resolve) => setTimeout(resolve, state.saveDelayMs));
               const commitId = "2222222222222222222222222222222222222222";
@@ -324,6 +328,61 @@ test("repository-work-history", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: /Assets\/avatar.txt/ }).click();
   await expect(page.getByText("+updated avatar")).toBeVisible();
   await saveScreenshot(page, testInfo, "repository-work-history");
+});
+
+test("repository-history-scrolls-long-list", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-history-scrolls-long-list"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { history: unknown[] } }).__mockState;
+    if (state) {
+      state.history = Array.from({ length: 40 }, (_, index) => ({
+        commitId: String(index + 1).padStart(40, "0"),
+        shortCommitId: String(index + 1).padStart(7, "0"),
+        memo: `history entry ${index + 1}`,
+        authorTime: "2026-08-13T00:00:00Z",
+      }));
+    }
+  });
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "保存履歴" }).click();
+  await expect(page.getByRole("heading", { name: "保存履歴" })).toBeVisible();
+  const content = page.locator('[data-app-content="true"]');
+  await expect(content).toHaveClass(/overflow-y-auto/);
+  const metrics = await content.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(metrics.overflowY).toBe("auto");
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+  await content.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => content.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
+test("repository-history-loads-older", async ({ page }) => {
+  test.skip(Boolean(selectedCase && selectedCase !== "repository-history-loads-older"), `Only ${selectedCase} was requested`);
+  await prepare(page);
+  await page.evaluate(() => {
+    const state = (window as unknown as { __mockState?: { history: unknown[] } }).__mockState;
+    if (state) {
+      state.history = Array.from({ length: 40 }, (_, index) => ({
+        commitId: String(index + 1).padStart(40, "0"),
+        shortCommitId: String(index + 1).padStart(7, "0"),
+        memo: `history entry ${index + 1}`,
+        authorTime: "2026-08-13T00:00:00Z",
+      }));
+    }
+  });
+  await page.getByRole("button", { name: "avatar-projectのリポジトリ設定を開く" }).click();
+  await page.getByRole("button", { name: "保存履歴" }).click();
+  const historyList = page.getByRole("list", { name: "保存履歴" });
+  await expect(historyList.getByRole("button")).toHaveCount(20);
+  await expect(page.getByRole("button", { name: "さらに読み込む" })).toBeVisible();
+  await page.getByRole("button", { name: "さらに読み込む" }).click();
+  await expect(historyList.getByRole("button")).toHaveCount(40);
+  await expect(page.getByRole("button", { name: "さらに読み込む" })).toHaveCount(0);
+  await expect(historyList.getByRole("button", { name: /history entry 40/ })).toBeVisible();
 });
 
 test("repository-work-expands-summary-on-abnormal-state", async ({ page }) => {

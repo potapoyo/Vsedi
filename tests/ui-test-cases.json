@@ -8,6 +8,14 @@
       "title": "現在の作業から保存履歴・diffまで",
       "screenshot": true
     },
+    "repository-history-scrolls-long-list": {
+      "title": "保存履歴の長い一覧をウィンドウ内スクロール",
+      "screenshot": false
+    },
+    "repository-history-loads-older": {
+      "title": "保存履歴の古い履歴を追加読み込み",
+      "screenshot": false
+    },
     "repository-work-expands-summary-on-abnormal-state": {
       "title": "現在の作業サマリーの折りたたみと異常時展開",
       "screenshot": false
