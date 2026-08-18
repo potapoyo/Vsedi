@@ -1,4 +1,14 @@
-import { Button, GroupBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, GroupBox, LineEdit, Palette, ScrollView } from "std-widgets.slint";
+
+export global AppTheme {
+    out property <color> page-background: #f8fafc;
+    out property <color> text-primary: #172033;
+    out property <color> text-secondary: #475569;
+    out property <color> text-muted: #64748b;
+    out property <color> card-background: #ffffff;
+    out property <color> card-border: #cbd5e1;
+    out property <color> accent: #2563eb;
+}
 
 export component MainWindow inherits Window {
     title: "Vsedi";
@@ -17,9 +27,15 @@ export component MainWindow inherits Window {
     callback refresh-worktree(string);
     callback save-project(string, string, string);
     callback refresh-history(string);
+    callback pick-project();
+    callback force-light-theme();
+
+    force-light-theme => {
+        Palette.color-scheme = ColorScheme.light;
+    }
 
     Rectangle {
-        background: #f7f7f8;
+        background: AppTheme.page-background;
 
         HorizontalLayout {
             padding: 20px;
@@ -87,6 +103,7 @@ export component MainWindow inherits Window {
                             text: "Home";
                             font-size: 28px;
                             font-weight: 700;
+                            color: AppTheme.text-primary;
                         }
 
                         GroupBox {
@@ -95,6 +112,7 @@ export component MainWindow inherits Window {
                                 padding: 14px;
                                 Text {
                                     text: root.environment-status;
+                                    color: AppTheme.text-primary;
                                     accessible-id: "environment-status";
                                 }
                             }
@@ -111,12 +129,20 @@ export component MainWindow inherits Window {
                                     accessible-id: "project-path";
                                 }
                                 Button {
+                                    text: "フォルダを選択";
+                                    primary: false;
+                                    clicked => { root.pick-project(); }
+                                    accessible-id: "pick-project";
+                                }
+                                Button {
                                     text: "Projectを診断";
+                                    primary: true;
                                     clicked => { root.inspect-project(root.project-path); }
                                     accessible-id: "inspect-project";
                                 }
                                 Text {
                                     text: root.project-status;
+                                    color: AppTheme.text-secondary;
                                     wrap: word-wrap;
                                     accessible-id: "project-status";
                                 }
@@ -130,11 +156,13 @@ export component MainWindow inherits Window {
                                 spacing: 10px;
                                 Button {
                                     text: "変更を確認";
+                                    primary: false;
                                     clicked => { root.refresh-worktree(root.project-path); }
                                     accessible-id: "refresh-worktree";
                                 }
                                 Text {
                                     text: root.worktree-status;
+                                    color: AppTheme.text-secondary;
                                     wrap: word-wrap;
                                     accessible-id: "worktree-status";
                                 }
@@ -145,11 +173,13 @@ export component MainWindow inherits Window {
                                 }
                                 Button {
                                     text: "作業を保存";
+                                    primary: true;
                                     clicked => { root.save-project(root.project-path, root.worktree-token, root.save-memo); }
                                     accessible-id: "save-project";
                                 }
                                 Text {
                                     text: root.save-status;
+                                    color: AppTheme.text-secondary;
                                     wrap: word-wrap;
                                     accessible-id: "save-status";
                                 }
@@ -163,11 +193,13 @@ export component MainWindow inherits Window {
                                 spacing: 10px;
                                 Button {
                                     text: "履歴を読み込む";
+                                    primary: false;
                                     clicked => { root.refresh-history(root.project-path); }
                                     accessible-id: "refresh-history";
                                 }
                                 Text {
                                     text: root.history-status;
+                                    color: AppTheme.text-secondary;
                                     wrap: word-wrap;
                                     accessible-id: "history-status";
                                 }
@@ -180,10 +212,12 @@ export component MainWindow inherits Window {
                                 padding: 14px;
                                 Text {
                                     text: "M3のRustサービスをSlint UIから呼び出す最小試作です。";
+                                    color: AppTheme.text-secondary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: "次の段階で変更一覧、diff、作業保存、保存履歴を移植します。";
+                                    color: AppTheme.text-muted;
                                     wrap: word-wrap;
                                 }
                             }

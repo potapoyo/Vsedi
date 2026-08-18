@@ -8168,6 +8168,7 @@ name = "vsedi"
 version = "0.1.0"
 dependencies = [
  "i-slint-backend-testing",
+ "rfd",
  "serde",
  "serde_json",
  "slint",

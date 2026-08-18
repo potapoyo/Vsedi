@@ -11,6 +11,9 @@ slint::include_modules!();
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = MainWindow::new()?;
+    // The content surface is intentionally light. Do this before showing the
+    // window so standard widgets do not briefly render with the OS dark theme.
+    window.invoke_force_light_theme();
     window.set_environment_status(SharedString::from(environment_text()));
 
     let weak_window = window.as_weak();
@@ -89,6 +92,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(window) = weak_window.upgrade() {
                     window.set_history_status(SharedString::from(result));
+                }
+            });
+        });
+    });
+
+    let weak_window = window.as_weak();
+    window.on_pick_project(move || {
+        let weak_window = weak_window.clone();
+        thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .set_title("Unity projectを選択")
+                .pick_folder()
+                .map(|path| path.to_string_lossy().into_owned());
+            let _ = slint::invoke_from_event_loop(move || {
+                if let (Some(window), Some(path)) = (weak_window.upgrade(), path) {
+                    window.set_project_path(SharedString::from(path));
                 }
             });
         });
@@ -181,5 +200,12 @@ mod tests {
             i_slint_backend_testing::ElementHandle::find_by_accessible_label(&app, "Projectを診断")
                 .collect::<Vec<_>>();
         assert_eq!(controls.len(), 1);
+
+        let pickers = i_slint_backend_testing::ElementHandle::find_by_accessible_label(
+            &app,
+            "フォルダを選択",
+        )
+        .collect::<Vec<_>>();
+        assert_eq!(pickers.len(), 1);
     }
 }
