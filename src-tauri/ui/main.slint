@@ -1,12 +1,12 @@
 import { Button, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 export global AppTheme {
-    out property <color> page-background: #f4f6fb;
+    out property <color> page-background: #f8fafc;
     out property <color> text-primary: #172033;
     out property <color> text-secondary: #475569;
     out property <color> text-muted: #64748b;
     out property <color> card-background: #ffffff;
-    out property <color> card-border: #dbe2ee;
+    out property <color> card-border: #e2e8f0;
     out property <color> accent: #2563eb;
     out property <color> accent-soft: #dbeafe;
     out property <color> success: #047857;
@@ -118,45 +118,46 @@ export component MainWindow inherits Window {
             spacing: 24px;
 
             Rectangle {
-                width: 244px;
-                border-radius: 18px;
-                background: #18202b;
+                width: 256px;
+                border-width: 1px;
+                border-color: #e2e8f0;
+                background: #ffffff;
 
                 VerticalLayout {
-                    padding: 22px;
-                    spacing: 14px;
+                    padding: 20px;
+                    spacing: 12px;
 
                     Text {
                         text: "LOCAL FIRST";
-                        color: #93c5fd;
+                        color: #2563eb;
                         font-size: 11px;
                         font-weight: 700;
                         letter-spacing: 2px;
                     }
                     Text {
                         text: "Vsedi";
-                        color: white;
+                        color: #0f172a;
                         font-size: 30px;
                         font-weight: 700;
                         accessible-label: "Vsedi";
                     }
                     Text {
                         text: "安全なローカル保存";
-                        color: #cbd5e1;
+                        color: #64748b;
                         font-size: 13px;
                     }
                     Text {
                         text: "Slint 移植試作";
-                        color: #93c5fd;
+                        color: #2563eb;
                         font-size: 13px;
                     }
 
-                    Rectangle { height: 1px; background: #39485c; }
+                    Rectangle { height: 1px; background: #e2e8f0; }
 
                     Rectangle {
                         height: 42px;
                         border-radius: 10px;
-                        background: #29364a;
+                        background: #0f172a;
                         HorizontalLayout {
                             padding-left: 14px;
                             Text {
@@ -172,30 +173,27 @@ export component MainWindow inherits Window {
                     }
                     Text {
                         text: "保存履歴";
-                        color: #cbd5e1;
+                        color: #475569;
                         font-size: 14px;
                         accessible-role: button;
                         accessible-id: "nav-history";
                     }
                     Text {
                         text: "設定";
-                        color: #cbd5e1;
+                        color: #475569;
                         font-size: 14px;
                         accessible-role: button;
                         accessible-id: "nav-settings";
                     }
 
-                    Rectangle { height: 1px; background: #39485c; }
+                    Rectangle { height: 1px; background: #e2e8f0; }
                     Rectangle { vertical-stretch: 1; }
                     Text {
-                        text: "Rust service boundary";
+                        text: "LOCAL ONLY";
                         color: #94a3b8;
-                        font-size: 12px;
-                    }
-                    Text {
-                        text: "M3 → M4";
-                        color: #64748b;
                         font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
                     }
                 }
             }
@@ -258,7 +256,7 @@ export component MainWindow inherits Window {
                                 Text {
                                     text: "管理する project を選択";
                                     color: white;
-                                    font-size: 26px;
+                                    font-size: 30px;
                                     font-weight: 700;
                                 }
                                 Text {
@@ -271,7 +269,7 @@ export component MainWindow inherits Window {
                             Rectangle { horizontal-stretch: 1; }
                             Button {
                                 text: "Projectを追加";
-                                primary: true;
+                                primary: false;
                                 accessible-id: "add-project";
                                 clicked => { root.pick-project(); }
                             }
@@ -293,13 +291,6 @@ export component MainWindow inherits Window {
                             value: root.project-path == "" ? "未選択" : "選択済み";
                             detail: root.project-status;
                             marker: AppTheme.accent;
-                        }
-                        MetricCard {
-                            horizontal-stretch: 1;
-                            eyebrow: "保存状態";
-                            value: root.worktree-status;
-                            detail: root.save-status == "" ? "変更を確認すると状態を表示します。" : root.save-status;
-                            marker: root.worktree-token == "" ? AppTheme.warning : AppTheme.success;
                         }
                     }
 
