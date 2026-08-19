@@ -1,7 +1,7 @@
 import { Button, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 export global AppTheme {
-    out property <color> page-background: #f4f6f9;
+    out property <color> page-background: #f8fafc;
     out property <color> sidebar-background: #ffffff;
     out property <color> surface: #ffffff;
     out property <color> surface-soft: #f8fafc;
@@ -58,7 +58,7 @@ component NavButton inherits Rectangle {
     callback clicked;
     height: 46px;
     border-radius: 11px;
-    background: root.active ? AppTheme.accent-soft : transparent;
+    background: root.active ? AppTheme.text-primary : transparent;
     accessible-role: button;
     accessible-label: root.label;
     accessible-action-default => { root.clicked(); }
@@ -69,7 +69,7 @@ component NavButton inherits Rectangle {
         width: 3px;
         height: parent.height - 18px;
         border-radius: 2px;
-        background: root.active ? AppTheme.accent : transparent;
+        background: root.active ? white : transparent;
     }
     Text {
         x: 18px;
@@ -77,7 +77,7 @@ component NavButton inherits Rectangle {
         width: parent.width - 30px;
         height: parent.height;
         text: root.label;
-        color: root.active ? AppTheme.accent : AppTheme.text-secondary;
+        color: root.active ? white : AppTheme.text-secondary;
         font-size: 15px;
         font-weight: root.active ? 700 : 600;
         vertical-alignment: center;
@@ -111,54 +111,6 @@ component Panel inherits Rectangle {
     border-width: 1px;
     border-color: AppTheme.border;
     background: AppTheme.surface;
-}
-
-component SummaryCard inherits Rectangle {
-    in property <string> label;
-    in property <string> value;
-    in property <string> detail;
-    in property <color> marker: AppTheme.accent;
-    height: 116px;
-    border-radius: 16px;
-    border-width: 1px;
-    border-color: AppTheme.border;
-    background: AppTheme.surface;
-
-    Rectangle {
-        x: 0px;
-        y: 24px;
-        width: 4px;
-        height: 52px;
-        border-radius: 2px;
-        background: root.marker;
-    }
-    VerticalLayout {
-        padding-left: 18px;
-        padding-right: 16px;
-        padding-top: 15px;
-        padding-bottom: 12px;
-        spacing: 4px;
-        Text {
-            text: root.label;
-            color: AppTheme.text-muted;
-            font-size: 12px;
-            font-weight: 700;
-        }
-        Text {
-            text: root.value;
-            color: AppTheme.text-primary;
-            font-size: 21px;
-            font-weight: 700;
-            overflow: elide;
-        }
-        Text {
-            text: root.detail;
-            color: AppTheme.text-secondary;
-            font-size: 13px;
-            wrap: word-wrap;
-            overflow: elide;
-        }
-    }
 }
 
 component FileRow inherits Rectangle {
@@ -294,12 +246,14 @@ export component MainWindow inherits Window {
         background: AppTheme.page-background;
 
         HorizontalLayout {
-            padding: 20px;
-            spacing: 20px;
+            width: 100%;
+            height: 100%;
+            padding: 0px;
+            spacing: 0px;
 
             Rectangle {
-                width: 244px;
-                border-radius: 18px;
+                width: 255px;
+                border-radius: 0px;
                 border-width: 1px;
                 border-color: AppTheme.border;
                 background: AppTheme.sidebar-background;
@@ -307,8 +261,8 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     padding-left: 18px;
                     padding-right: 18px;
-                    padding-top: 22px;
-                    padding-bottom: 18px;
+                    padding-top: 28px;
+                    padding-bottom: 24px;
                     spacing: 10px;
 
                     Text {
@@ -372,6 +326,8 @@ export component MainWindow inherits Window {
             }
 
             ScrollView {
+                width: 100%;
+                height: 100%;
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
                 vertical-scrollbar-policy: ScrollBarPolicy.always-on;
@@ -380,10 +336,13 @@ export component MainWindow inherits Window {
 
                 if root.current-page == "HOME": VerticalLayout {
                     width: 100%;
+                    min-height: 1120px;
                     min-width: 760px;
-                    padding-right: 12px;
-                    padding-bottom: 16px;
-                    spacing: 20px;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-top: 24px;
+                    padding-bottom: 24px;
+                    spacing: 24px;
 
                     Rectangle {
                         height: 68px;
@@ -400,31 +359,30 @@ export component MainWindow inherits Window {
                                 spacing: 6px;
                                 HorizontalLayout {
                                     spacing: 8px;
-                                    Text {
-                                        text: root.environment-status;
-                                        color: AppTheme.text-muted;
-                                        font-size: 12px;
-                                        horizontal-alignment: right;
-                                        overflow: elide;
-                                    }
                                     StatusPill {
                                         pill-text: "ローカル";
                                         pill-background: AppTheme.success-soft;
                                         pill-foreground: AppTheme.success;
                                     }
-                                }
-                                Button {
-                                    text: "再読込";
-                                    primary: false;
-                                    accessible-id: "refresh-home";
-                                    clicked => { root.refresh-application(); }
+                                    Button {
+                                        text: "Projectを追加";
+                                        primary: false;
+                                        accessible-id: "add-project";
+                                        clicked => { root.pick-project(); }
+                                    }
+                                    Button {
+                                        text: "再読込";
+                                        primary: false;
+                                        accessible-id: "refresh-home";
+                                        clicked => { root.refresh-application(); }
+                                    }
                                 }
                             }
                         }
                     }
 
                     Rectangle {
-                        min-height: 188px;
+                        min-height: 164px;
                         border-radius: 22px;
                         background: AppTheme.hero;
                         HorizontalLayout {
@@ -459,38 +417,6 @@ export component MainWindow inherits Window {
                                     font-size: 12px;
                                 }
                             }
-                            Rectangle { horizontal-stretch: 1; }
-                            Button {
-                                text: "Projectを追加";
-                                primary: false;
-                                accessible-id: "add-project";
-                                clicked => { root.pick-project(); }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 12px;
-                        SummaryCard {
-                            horizontal-stretch: 1;
-                            label: "実行環境";
-                            value: "確認済み";
-                            detail: root.environment-status;
-                            marker: AppTheme.success;
-                        }
-                        SummaryCard {
-                            horizontal-stretch: 1;
-                            label: "Project 診断";
-                            value: root.project-path == "" ? "未選択" : "選択済み";
-                            detail: root.project-status;
-                            marker: AppTheme.accent;
-                        }
-                        SummaryCard {
-                            horizontal-stretch: 1;
-                            label: "保存履歴";
-                            value: root.worktree-token == "" ? "未確認" : "確認済み";
-                            detail: "ローカル repository のみ";
-                            marker: #7c3aed;
                         }
                     }
 
@@ -753,10 +679,13 @@ export component MainWindow inherits Window {
 
                 if root.current-page == "HISTORY": VerticalLayout {
                     width: 100%;
+                    min-height: 760px;
                     min-width: 760px;
-                    padding-right: 12px;
-                    padding-bottom: 16px;
-                    spacing: 20px;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-top: 24px;
+                    padding-bottom: 24px;
+                    spacing: 24px;
 
                     Rectangle {
                         height: 68px;
@@ -861,10 +790,13 @@ export component MainWindow inherits Window {
 
                 if root.current-page == "SETTINGS": VerticalLayout {
                     width: 100%;
+                    min-height: 760px;
                     min-width: 760px;
-                    padding-right: 12px;
-                    padding-bottom: 16px;
-                    spacing: 20px;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-top: 24px;
+                    padding-bottom: 24px;
+                    spacing: 24px;
 
                     Rectangle {
                         height: 68px;
