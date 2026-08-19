@@ -10,8 +10,6 @@ Web フロントエンドは状態表示とユーザー操作の受付を担当�
 
 Rust / TypeScript 間の共有データ型は ADR 0008 に従い、Rust を正本として `serde + ts-rs` から TypeScript 型を生成する。
 
-Slint移植中は、UIからRust serviceを呼ぶ操作名とDTOを `src-tauri/src/application.rs` のapplication facadeに集約する。Tauri commandとSlint callbackは同じfacade/serviceを利用し、UI frameworkの変更がGit・diagnostics・save・historyの安全条件へ影響しないようにする。移植完了後はTypeScript型生成を廃止し、SlintとRustのbindingを正本とする。
-
 メインウィンドウの画面遷移、repository workspace、全体設定とrepository設定の境界は [`application-navigation-and-settings.md`](application-navigation-and-settings.md) に従う。
 
 M1 の実装は `src-tauri/src` に次の境界を持つ。`commands` は Tauri の薄い入口、`services` はユースケース、`git` / `platform` / `settings` は具体的な外部状態との接続を担当する。
@@ -54,18 +52,6 @@ Domain / Adapters
     |-- FileSafety
     |-- SettingsStore
     `-- PlatformAdapter
-```
-
-移植後のUI境界は次を目標とする。移植完了まではTauri commandとSlint UIを併存させる。
-
-```text
-Slint UI
-    |
-    v
-Application facade / presenter
-    |
-    v
-Application Services / Domain / Adapters
 ```
 
 ## フロントエンドの責務

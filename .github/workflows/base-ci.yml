@@ -1,9 +1,9 @@
 name: CI — 基本チェック
 
-# Slint migration: automatic checks are paused until the new build/test path
-# is restored in a later commit. Keep this manually runnable for diagnostics.
 on:
-  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
 
 jobs:
   frontend:

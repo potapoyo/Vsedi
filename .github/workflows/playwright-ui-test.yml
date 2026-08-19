@@ -1,7 +1,5 @@
 name: UI Test — Playwright (Windows / macOS)
 
-# Slint migration: Playwright targets the retired React/Tauri UI. Keep the
-# workflow available for historical comparison, but do not run it automatically.
 on:
   workflow_dispatch:
     inputs:
@@ -9,6 +7,14 @@ on:
         description: "テストケース名（空欄で全ケース）"
         required: false
         default: ""
+  pull_request:
+    paths:
+      - ".github/workflows/playwright-ui-test.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "playwright.config.ts"
+      - "src/**"
+      - "tests/**"
 
 permissions:
   contents: read
